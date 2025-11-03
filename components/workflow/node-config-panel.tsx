@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { TriggerConfig } from './config/trigger-config';
 import { ActionConfig } from './config/action-config';
 import { AvailableOutputs } from './available-outputs';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 
 export function NodeConfigPanel() {
   const [selectedNodeId, setSelectedNodeId] = useAtom(selectedNodeAtom);
@@ -26,30 +27,23 @@ export function NodeConfigPanel() {
 
   const selectedNode = nodes.find((node) => node.id === selectedNodeId);
 
-  if (!selectedNode) {
-    return (
-      <Card className="flex h-full w-80 flex-col rounded-none border-t-0 border-r-0 border-b-0 border-l">
-        <CardHeader>
-          <CardTitle className="text-lg">Properties</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-muted-foreground text-sm">Select a node to configure</div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   const handleUpdateLabel = (label: string) => {
-    updateNodeData({ id: selectedNode.id, data: { label } });
+    if (selectedNode) {
+      updateNodeData({ id: selectedNode.id, data: { label } });
+    }
   };
 
   const handleUpdateDescription = (description: string) => {
-    updateNodeData({ id: selectedNode.id, data: { description } });
+    if (selectedNode) {
+      updateNodeData({ id: selectedNode.id, data: { description } });
+    }
   };
 
   const handleUpdateConfig = (key: string, value: string) => {
-    const newConfig = { ...selectedNode.data.config, [key]: value };
-    updateNodeData({ id: selectedNode.id, data: { config: newConfig } });
+    if (selectedNode) {
+      const newConfig = { ...selectedNode.data.config, [key]: value };
+      updateNodeData({ id: selectedNode.id, data: { config: newConfig } });
+    }
   };
 
   const handleDelete = () => {
@@ -62,15 +56,10 @@ export function NodeConfigPanel() {
     setSelectedNodeId(null);
   };
 
-  return (
-    <Card className="flex h-full w-80 flex-col rounded-none border-t-0 border-r-0 border-b-0 border-l">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-lg">Properties</CardTitle>
-        <Button variant="ghost" size="icon" onClick={handleClose}>
-          <X className="h-4 w-4" />
-        </Button>
-      </CardHeader>
-      <CardContent className="flex-1 space-y-4 overflow-y-auto">
+  // Shared content for both mobile (Sheet) and desktop (Card)
+  const panelContent = selectedNode ? (
+    <div className="flex h-full flex-col">
+      <div className="flex-1 space-y-4 overflow-y-auto p-6">
         <div className="space-y-2">
           <Label htmlFor="label">Label</Label>
           <Input
@@ -159,7 +148,38 @@ export function NodeConfigPanel() {
             Delete Node
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
+  ) : (
+    <div className="p-6">
+      <div className="text-muted-foreground text-sm">Select a node to configure</div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Mobile: Sheet */}
+      <Sheet open={!!selectedNode} onOpenChange={(open) => !open && handleClose()}>
+        <SheetContent side="bottom" className="h-[85vh] md:hidden">
+          <SheetHeader>
+            <SheetTitle>Properties</SheetTitle>
+          </SheetHeader>
+          {panelContent}
+        </SheetContent>
+      </Sheet>
+
+      {/* Desktop: Fixed sidebar */}
+      <Card className="hidden h-full w-80 flex-col rounded-none border-t-0 border-r-0 border-b-0 border-l md:flex">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-lg">Properties</CardTitle>
+          {selectedNode && (
+            <Button variant="ghost" size="icon" onClick={handleClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent className="flex-1 overflow-y-auto p-0">{panelContent}</CardContent>
+      </Card>
+    </>
   );
 }
