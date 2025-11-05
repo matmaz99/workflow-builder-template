@@ -76,7 +76,6 @@ export const GET = async (request: NextRequest) => {
 
     return NextResponse.json({ projects: localProjects });
   } catch (error) {
-    console.error("Failed to fetch Vercel projects:", error);
     return NextResponse.json(
       {
         error: "Failed to fetch Vercel projects",
@@ -113,35 +112,38 @@ export const POST = async (request: NextRequest) => {
       },
     });
 
-    let vercelProjectId: string;
-    let actualFramework: string | null = framework || null;
-
-    // If user has Vercel API token configured, create a real project on Vercel
-    if (userData?.vercelApiToken) {
-      const result = await createProject({
-        name: name.trim(),
-        apiToken: userData.vercelApiToken,
-        teamId: userData.vercelTeamId || undefined,
-        framework: framework || undefined,
-      });
-
-      if (result.status === "error") {
-        return NextResponse.json({ error: result.error }, { status: 500 });
-      }
-
-      if (!result.project) {
-        return NextResponse.json(
-          { error: "Failed to create project on Vercel" },
-          { status: 500 }
-        );
-      }
-
-      vercelProjectId = result.project.id;
-      actualFramework = result.project.framework;
-    } else {
-      // Create a local project entry only (no Vercel API token)
-      vercelProjectId = `local-${Date.now()}`;
+    // Require Vercel API token to create projects
+    if (!userData?.vercelApiToken) {
+      return NextResponse.json(
+        {
+          error:
+            "Vercel API token not configured. Please configure your Vercel API token in settings before creating projects.",
+        },
+        { status: 400 }
+      );
     }
+
+    // Create a real project on Vercel
+    const result = await createProject({
+      name: name.trim(),
+      apiToken: userData.vercelApiToken,
+      teamId: userData.vercelTeamId || undefined,
+      framework: framework || undefined,
+    });
+
+    if (result.status === "error") {
+      return NextResponse.json({ error: result.error }, { status: 500 });
+    }
+
+    if (!result.project) {
+      return NextResponse.json(
+        { error: "Failed to create project on Vercel" },
+        { status: 500 }
+      );
+    }
+
+    const vercelProjectId = result.project.id;
+    const actualFramework = result.project.framework;
 
     // Store in local database
     const [newProject] = await db
@@ -156,7 +158,6 @@ export const POST = async (request: NextRequest) => {
 
     return NextResponse.json({ project: newProject });
   } catch (error) {
-    console.error("Failed to create Vercel project:", error);
     return NextResponse.json(
       {
         error: "Failed to create Vercel project",
@@ -194,7 +195,6 @@ export const DELETE = async (request: NextRequest) => {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Failed to delete Vercel project:", error);
     return NextResponse.json(
       {
         error: "Failed to delete Vercel project",

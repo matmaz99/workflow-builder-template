@@ -15,7 +15,13 @@ export const vercelProjectsAtom = atomWithStorage<VercelProject[]>(
 );
 export const selectedProjectIdAtom = atomWithStorage<string>(
   "selected-project-id",
-  "none"
+  ""
+);
+
+// Workflow prompt state (persists in local storage)
+export const workflowPromptAtom = atomWithStorage<string>(
+  "workflow-prompt",
+  ""
 );
 
 // UI state atoms (don't need to persist)

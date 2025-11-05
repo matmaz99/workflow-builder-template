@@ -12,6 +12,7 @@ import {
   PromptInputProvider,
   PromptInputSubmit,
   PromptInputTextarea,
+  usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +29,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -37,17 +39,33 @@ import {
   selectedProjectIdAtom,
   showNewProjectDialogAtom,
   vercelProjectsAtom,
+  workflowPromptAtom,
 } from "@/lib/atoms/vercel-projects";
 import { useSession } from "@/lib/auth-client";
 import { workflowApi } from "@/lib/workflow-api";
 
+// Component to sync the provider's internal state with our Jotai atom
+function PromptSync({ atomValue }: { atomValue: string }) {
+  const controller = usePromptInputController();
+
+  useEffect(() => {
+    // Sync atom value to provider on mount and when atom changes
+    if (controller.textInput.value !== atomValue) {
+      controller.textInput.setInput(atomValue);
+    }
+  }, [atomValue, controller]);
+
+  return null;
+}
+
 export function WorkflowPrompt() {
-  // Local component state (dumb state that doesn't need to persist)
-  const [prompt, setPrompt] = useState("");
+  // Local component state (doesn't need to persist)
   const [isGenerating, setIsGenerating] = useState(false);
+  const [hasVercelToken, setHasVercelToken] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Jotai atoms (shared state that persists across mounts)
+  const [prompt, setPrompt] = useAtom(workflowPromptAtom);
   const [selectedProjectId, setSelectedProjectId] = useAtom(
     selectedProjectIdAtom
   );
@@ -70,13 +88,21 @@ export function WorkflowPrompt() {
         const response = await fetch("/api/user/vercel-projects");
         if (response.ok) {
           const data = await response.json();
-          console.log("Loaded Vercel projects:", data.projects);
           setVercelProjects(data.projects || []);
+          setHasVercelToken(true);
+        } else if (response.status === 400) {
+          // Vercel API token not configured
+          setVercelProjects([]);
+          setHasVercelToken(false);
         } else {
-          console.error("Failed to fetch projects, status:", response.status);
+          // Other errors - silently fail
+          setVercelProjects([]);
+          setHasVercelToken(false);
         }
       } catch (error) {
-        console.error("Failed to load Vercel projects:", error);
+        // Network or other errors - silently fail
+        setVercelProjects([]);
+        setHasVercelToken(false);
       }
     };
 
@@ -85,6 +111,25 @@ export function WorkflowPrompt() {
 
   const handleProjectChange = (value: string) => {
     if (value === "new") {
+      // Check if user has Vercel API token configured
+      if (!hasVercelToken) {
+        toast(
+          <div className="flex flex-col gap-2">
+            <p>Please configure your Vercel API token in settings first.</p>
+            <Button
+              onClick={() => router.push("/settings")}
+              size="sm"
+              variant="outline"
+            >
+              Go to Settings
+            </Button>
+          </div>,
+          {
+            duration: 5000,
+          }
+        );
+        return;
+      }
       setShowNewProjectDialog(true);
     } else {
       setSelectedProjectId(value);
@@ -92,6 +137,12 @@ export function WorkflowPrompt() {
   };
 
   const handleCreateProject = async () => {
+    // Check if already creating
+    if (creatingProject) {
+      toast.error("Already creating a project. Please wait.");
+      return;
+    }
+
     if (!newProjectName.trim()) {
       toast.error("Please enter a project name");
       return;
@@ -107,14 +158,12 @@ export function WorkflowPrompt() {
 
       if (response.ok) {
         const data = await response.json();
-        console.log("Created project:", data.project);
 
         // Update the projects list
         setVercelProjects((prev) => [...prev, data.project]);
 
         // Select the newly created project
         setSelectedProjectId(data.project.id);
-        console.log("Selected project ID set to:", data.project.id);
 
         // Close dialog and clear form
         setShowNewProjectDialog(false);
@@ -126,7 +175,6 @@ export function WorkflowPrompt() {
         toast.error(error.error || "Failed to create project");
       }
     } catch (error) {
-      console.error("Failed to create project:", error);
       toast.error("Failed to create project");
     } finally {
       setCreatingProject(false);
@@ -135,13 +183,31 @@ export function WorkflowPrompt() {
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt.trim() || isGenerating) return;
+
+    // Check if already generating
+    if (isGenerating) {
+      toast.error("Already generating a workflow. Please wait.");
+      throw new Error("Already generating");
+    }
+
+    // Check if prompt is empty
+    if (!prompt.trim()) {
+      toast.error("Please describe your workflow");
+      throw new Error("Empty prompt");
+    }
 
     // Check if user is logged in
     if (!session) {
+      toast.error("Please log in to create workflows");
       // Redirect to login page
       router.push("/login");
-      return;
+      throw new Error("Not logged in");
+    }
+
+    // Check if a project is selected
+    if (!selectedProjectId) {
+      toast.error("Please select a project before creating a workflow");
+      throw new Error("No project selected");
     }
 
     setIsGenerating(true);
@@ -152,26 +218,29 @@ export function WorkflowPrompt() {
         description: `Generated from: ${prompt}`,
         nodes: [],
         edges: [],
-        vercelProjectId:
-          selectedProjectId === "none" ? undefined : selectedProjectId,
+        vercelProjectId: selectedProjectId,
       });
 
       // Store the prompt in sessionStorage for the workflow page to use
       sessionStorage.setItem("ai-prompt", prompt);
       sessionStorage.setItem("generating-workflow-id", newWorkflow.id);
 
+      // Clear the prompt only after successful creation
+      setPrompt("");
+
       // Navigate to the new workflow immediately
       router.push(`/workflows/${newWorkflow.id}?generating=true`);
     } catch (error) {
-      console.error("Failed to create workflow:", error);
       toast.error("Failed to create workflow. Please try again.");
       setIsGenerating(false);
+      throw error;
     }
   };
 
   return (
     <div className="mx-auto w-full max-w-lg">
-      <PromptInputProvider>
+      <PromptInputProvider initialInput={prompt}>
+        <PromptSync atomValue={prompt} />
         <PromptInput
           className="bg-background"
           globalDrop
@@ -188,29 +257,30 @@ export function WorkflowPrompt() {
           </PromptInputBody>
           <PromptInputFooter>
             <Select
-              disabled={isGenerating}
               onValueChange={handleProjectChange}
               value={selectedProjectId}
             >
               <SelectTrigger className="border-none shadow-none hover:bg-accent">
-                <SelectValue placeholder="Select project (optional)" />
+                <SelectValue placeholder="Select project" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No project</SelectItem>
-                {vercelProjects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
                 <SelectItem className="text-primary" value="new">
                   <div className="flex items-center gap-2">
                     <Plus className="h-4 w-4" />
                     <span>New Project</span>
                   </div>
                 </SelectItem>
+                {vercelProjects.length > 0 && <SelectSeparator />}
+                {[...vercelProjects]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
-            <PromptInputSubmit status={isGenerating ? "submitted" : "ready"} />
+            <PromptInputSubmit status="ready" />
           </PromptInputFooter>
         </PromptInput>
       </PromptInputProvider>
@@ -233,11 +303,10 @@ export function WorkflowPrompt() {
             <div className="space-y-2">
               <Label htmlFor="projectName">Project Name</Label>
               <Input
-                disabled={creatingProject}
                 id="projectName"
                 onChange={(e) => setNewProjectName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !creatingProject) {
+                  if (e.key === "Enter") {
                     handleCreateProject();
                   }
                 }}
@@ -252,7 +321,6 @@ export function WorkflowPrompt() {
 
           <DialogFooter>
             <Button
-              disabled={creatingProject}
               onClick={() => {
                 setShowNewProjectDialog(false);
                 setNewProjectName("");
@@ -261,10 +329,7 @@ export function WorkflowPrompt() {
             >
               Cancel
             </Button>
-            <Button
-              disabled={creatingProject || !newProjectName.trim()}
-              onClick={handleCreateProject}
-            >
+            <Button onClick={handleCreateProject}>
               {creatingProject ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
