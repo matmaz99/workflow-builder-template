@@ -61,7 +61,6 @@ function PromptSync({ atomValue }: { atomValue: string }) {
 export function WorkflowPrompt() {
   // Local component state (doesn't need to persist)
   const [isGenerating, setIsGenerating] = useState(false);
-  const [hasVercelToken, setHasVercelToken] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Jotai atoms (shared state that persists across mounts)
@@ -89,46 +88,54 @@ export function WorkflowPrompt() {
         if (response.ok) {
           const data = await response.json();
           setVercelProjects(data.projects || []);
-          setHasVercelToken(true);
         } else if (response.status === 400) {
           // Vercel API token not configured
           setVercelProjects([]);
-          setHasVercelToken(false);
         } else {
           // Other errors - silently fail
           setVercelProjects([]);
-          setHasVercelToken(false);
         }
       } catch (error) {
         // Network or other errors - silently fail
         setVercelProjects([]);
-        setHasVercelToken(false);
       }
     };
 
     loadVercelProjects();
   }, [session, setVercelProjects]);
 
-  const handleProjectChange = (value: string) => {
+  const handleProjectChange = async (value: string) => {
     if (value === "new") {
-      // Check if user has Vercel API token configured
-      if (!hasVercelToken) {
-        toast(
-          <div className="flex flex-col gap-2">
-            <p>Please configure your Vercel API token in settings first.</p>
-            <Button
-              onClick={() => router.push("/settings")}
-              size="sm"
-              variant="outline"
-            >
-              Go to Settings
-            </Button>
-          </div>,
-          {
-            duration: 5000,
-          }
-        );
+      // If we have projects, we know they have a token - show dialog immediately
+      if (vercelProjects.length > 0) {
+        setShowNewProjectDialog(true);
         return;
+      }
+
+      // No projects loaded - check if they have a token configured
+      try {
+        const response = await fetch("/api/user/vercel-projects");
+        if (response.status === 400) {
+          // Vercel API token not configured
+          toast(
+            <div className="flex flex-col gap-2">
+              <p>Please configure your Vercel API token in settings first.</p>
+              <Button
+                onClick={() => router.push("/settings")}
+                size="sm"
+                variant="outline"
+              >
+                Go to Settings
+              </Button>
+            </div>,
+            {
+              duration: 5000,
+            }
+          );
+          return;
+        }
+      } catch (error) {
+        // If there's an error checking, allow them to try
       }
       setShowNewProjectDialog(true);
     } else {
