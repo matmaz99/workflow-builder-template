@@ -82,7 +82,7 @@ const Home = () => {
     };
     setNodes([addNodePlaceholder]);
     setEdges([]);
-    setCurrentWorkflowName("Untitled Workflow");
+    setCurrentWorkflowName("New Workflow");
     hasCreatedWorkflowRef.current = false;
   }, [setNodes, setEdges, setCurrentWorkflowName, handleAddNode]);
 
