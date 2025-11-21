@@ -75,14 +75,11 @@ export function IntegrationSelector({
 
   if (loading) {
     return (
-      <div className="space-y-2">
-        {label && <Label>{label}</Label>}
-        <Select disabled value="">
-          <SelectTrigger className="flex-1">
-            <SelectValue placeholder="Loading..." />
-          </SelectTrigger>
-        </Select>
-      </div>
+      <Select disabled value="">
+        <SelectTrigger className="flex-1">
+          <SelectValue placeholder="Loading..." />
+        </SelectTrigger>
+      </Select>
     );
   }
 

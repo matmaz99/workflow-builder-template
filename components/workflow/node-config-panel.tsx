@@ -650,8 +650,7 @@ const PanelInner = () => {
                     onChange={(id) => handleUpdateConfig("integrationId", id)}
                     onOpenSettings={() => setShowIntegrationsDialog(true)}
                     value={
-                      (selectedNode.data.config?.integrationId as string) ||
-                      ""
+                      (selectedNode.data.config?.integrationId as string) || ""
                     }
                   />
                 ) : null;
