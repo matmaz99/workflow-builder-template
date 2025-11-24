@@ -422,7 +422,7 @@ export function WorkflowCanvas(_props: WorkflowCanvasProps) {
         onSelectionChange={isGenerating ? undefined : onSelectionChange}
       >
         <Panel
-          className="border-none bg-transparent p-0"
+          className="workflow-controls-panel border-none bg-transparent p-0"
           position="bottom-left"
         >
           <Controls />
