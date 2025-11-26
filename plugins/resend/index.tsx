@@ -3,11 +3,11 @@ import type { IntegrationPlugin } from "../registry";
 import { registerIntegration } from "../registry";
 import { sendEmailCodegenTemplate } from "./codegen/send-email";
 import { ResendSettings } from "./settings";
-import { SendEmailConfigFields } from "./steps/send-email";
+import { SendEmailConfigFields } from "./steps/send-email/config";
 import { testResend } from "./test";
 
 // Export step functions for workflow execution
-export { sendEmailStep } from "./steps/send-email";
+export { sendEmailStep } from "./steps/send-email/step";
 
 const resendPlugin: IntegrationPlugin = {
   type: "resend",

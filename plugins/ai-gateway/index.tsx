@@ -4,13 +4,13 @@ import { registerIntegration } from "../registry";
 import { generateImageCodegenTemplate } from "./codegen/generate-image";
 import { generateTextCodegenTemplate } from "./codegen/generate-text";
 import { AiGatewaySettings } from "./settings";
-import { GenerateImageConfigFields } from "./steps/generate-image";
-import { GenerateTextConfigFields } from "./steps/generate-text";
+import { GenerateImageConfigFields } from "./steps/generate-image/config";
+import { GenerateTextConfigFields } from "./steps/generate-text/config";
 import { testAiGateway } from "./test";
 
 // Export step functions for workflow execution
-export { generateTextStep } from "./steps/generate-text";
-export { generateImageStep } from "./steps/generate-image";
+export { generateTextStep } from "./steps/generate-text/step";
+export { generateImageStep } from "./steps/generate-image/step";
 
 const aiGatewayPlugin: IntegrationPlugin = {
   type: "ai-gateway",

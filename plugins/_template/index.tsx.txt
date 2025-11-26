@@ -11,11 +11,11 @@ import { registerIntegration } from "../registry";
 import { [actionName]CodegenTemplate } from "./codegen/[action-file]";
 import { [IntegrationName]Icon } from "./icon";
 import { [IntegrationName]Settings } from "./settings";
-import { [ActionName]ConfigFields } from "./steps/[action-file]";
+import { [ActionName]ConfigFields } from "./steps/[action-file]/config";
 import { test[IntegrationName] } from "./test";
 
 // Export step functions for workflow execution
-export { [actionName]Step } from "./steps/[action-file]";
+export { [actionName]Step } from "./steps/[action-file]/step";
 
 const [integrationId]Plugin: IntegrationPlugin = {
   type: "[integration-id]", // Must match type in lib/db/integrations.ts

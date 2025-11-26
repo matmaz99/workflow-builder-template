@@ -3,11 +3,11 @@ import type { IntegrationPlugin } from "../registry";
 import { registerIntegration } from "../registry";
 import { sendSlackMessageCodegenTemplate } from "./codegen/send-slack-message";
 import { SlackSettings } from "./settings";
-import { SendSlackMessageConfigFields } from "./steps/send-slack-message";
+import { SendSlackMessageConfigFields } from "./steps/send-slack-message/config";
 import { testSlack } from "./test";
 
 // Export step functions for workflow execution
-export { sendSlackMessageStep } from "./steps/send-slack-message";
+export { sendSlackMessageStep } from "./steps/send-slack-message/step";
 
 const slackPlugin: IntegrationPlugin = {
   type: "slack",

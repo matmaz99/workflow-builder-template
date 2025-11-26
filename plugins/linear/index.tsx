@@ -3,11 +3,11 @@ import type { IntegrationPlugin } from "../registry";
 import { registerIntegration } from "../registry";
 import { createTicketCodegenTemplate } from "./codegen/create-ticket";
 import { LinearSettings } from "./settings";
-import { CreateTicketConfigFields } from "./steps/create-ticket";
+import { CreateTicketConfigFields } from "./steps/create-ticket/config";
 import { testLinear } from "./test";
 
 // Export step functions for workflow execution
-export { createTicketStep } from "./steps/create-ticket";
+export { createTicketStep } from "./steps/create-ticket/step";
 
 const linearPlugin: IntegrationPlugin = {
   type: "linear",
