@@ -494,7 +494,7 @@ export function generateWorkflowSDKCode(
   function buildAITextParams(config: Record<string, unknown>): string[] {
     imports.add("import { generateText } from 'ai';");
     const modelId = (config.aiModel as string) || "meta/llama-4-scout";
-    
+
     // Determine the full model string with provider
     // If the model already contains a "/", it already has a provider prefix, so use as-is
     let modelString: string;
@@ -502,15 +502,17 @@ export function generateWorkflowSDKCode(
       modelString = modelId;
     } else {
       // Infer provider from model name for models without provider prefix
-      const provider =
-        modelId.startsWith("gpt-") || modelId.startsWith("o1-")
-          ? "openai"
-          : modelId.startsWith("claude-")
-            ? "anthropic"
-            : "openai"; // default to openai
+      let provider: string;
+      if (modelId.startsWith("gpt-") || modelId.startsWith("o1-")) {
+        provider = "openai";
+      } else if (modelId.startsWith("claude-")) {
+        provider = "anthropic";
+      } else {
+        provider = "openai"; // default to openai
+      }
       modelString = `${provider}/${modelId}`;
     }
-    
+
     return [
       `model: "${modelString}"`,
       `prompt: \`${convertTemplateToJS((config.aiPrompt as string) || "")}\``,
