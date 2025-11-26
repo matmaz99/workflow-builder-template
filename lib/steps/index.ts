@@ -64,11 +64,11 @@ export const stepRegistry: Record<string, StepFunction> = {
     (await import("./logging")).logNodeCompleteStep(
       input as Parameters<typeof logNodeCompleteStep>[0]
     ),
-  "Firecrawl Scrape": async (input) =>
+  Scrape: async (input) =>
     (await import("./firecrawl")).firecrawlScrapeStep(
       input as Parameters<typeof firecrawlScrapeStep>[0]
     ),
-  "Firecrawl Search": async (input) =>
+  Search: async (input) =>
     (await import("./firecrawl")).firecrawlSearchStep(
       input as Parameters<typeof firecrawlSearchStep>[0]
     ),
