@@ -1,8 +1,7 @@
 /**
- * Code template for Generate Text action step
- * This is a string template used for code generation - keep as string export
+ * Code generation template for Generate Text action
  */
-export default `import { generateText, generateObject } from 'ai';
+export const generateTextCodegenTemplate = `import { generateText, generateObject } from 'ai';
 import { z } from 'zod';
 
 export async function generateTextStep(input: {

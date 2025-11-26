@@ -4,10 +4,10 @@
 
 import conditionTemplate from "@/lib/codegen-templates/condition";
 import databaseQueryTemplate from "@/lib/codegen-templates/database-query";
-import generateImageTemplate from "@/lib/codegen-templates/generate-image";
-import generateTextTemplate from "@/lib/codegen-templates/generate-text";
 import httpRequestTemplate from "@/lib/codegen-templates/http-request";
 import sendSlackMessageTemplate from "@/lib/codegen-templates/send-slack-message";
+import { generateImageCodegenTemplate } from "@/plugins/ai-gateway/codegen/generate-image";
+import { generateTextCodegenTemplate } from "@/plugins/ai-gateway/codegen/generate-text";
 import { scrapeCodegenTemplate } from "@/plugins/firecrawl/codegen/scrape";
 import { searchCodegenTemplate } from "@/plugins/firecrawl/codegen/search";
 import { createTicketCodegenTemplate } from "@/plugins/linear/codegen/create-ticket";
@@ -71,9 +71,9 @@ export async function POST(request: NextRequest) {
       case "Create Linear Issue":
         return createTicketCodegenTemplate;
       case "Generate Text":
-        return generateTextTemplate;
+        return generateTextCodegenTemplate;
       case "Generate Image":
-        return generateImageTemplate;
+        return generateImageCodegenTemplate;
       case "Database Query":
         return databaseQueryTemplate;
       case "HTTP Request":

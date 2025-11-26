@@ -1,5 +1,7 @@
 import "server-only";
 
+import { generateImageCodegenTemplate } from "../plugins/ai-gateway/codegen/generate-image";
+import { generateTextCodegenTemplate } from "../plugins/ai-gateway/codegen/generate-text";
 import { scrapeCodegenTemplate } from "../plugins/firecrawl/codegen/scrape";
 import { searchCodegenTemplate } from "../plugins/firecrawl/codegen/search";
 import { createTicketCodegenTemplate } from "../plugins/linear/codegen/create-ticket";
@@ -7,8 +9,6 @@ import { sendEmailCodegenTemplate } from "../plugins/resend/codegen/send-email";
 // Import codegen templates directly
 import conditionTemplate from "./codegen-templates/condition";
 import databaseQueryTemplate from "./codegen-templates/database-query";
-import generateImageTemplate from "./codegen-templates/generate-image";
-import generateTextTemplate from "./codegen-templates/generate-text";
 import httpRequestTemplate from "./codegen-templates/http-request";
 import sendSlackMessageTemplate from "./codegen-templates/send-slack-message";
 import {
@@ -35,8 +35,8 @@ function loadStepImplementation(actionType: string): string | null {
     "Send Slack Message": sendSlackMessageTemplate,
     "Create Ticket": createTicketCodegenTemplate,
     "Find Issues": createTicketCodegenTemplate, // Uses same template for now
-    "Generate Text": generateTextTemplate,
-    "Generate Image": generateImageTemplate,
+    "Generate Text": generateTextCodegenTemplate,
+    "Generate Image": generateImageCodegenTemplate,
     "Database Query": databaseQueryTemplate,
     Scrape: scrapeCodegenTemplate,
     Search: searchCodegenTemplate,

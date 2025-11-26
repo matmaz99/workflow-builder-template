@@ -105,12 +105,12 @@ async function executeActionStep(input: {
     return await createTicketStep(stepInput as any);
   }
   if (actionType === "Generate Text") {
-    const { generateTextStep } = await import("./steps/generate-text");
+    const { generateTextStep } = await import("../plugins/ai-gateway");
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
     return await generateTextStep(stepInput as any);
   }
   if (actionType === "Generate Image") {
-    const { generateImageStep } = await import("./steps/generate-image");
+    const { generateImageStep } = await import("../plugins/ai-gateway");
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
     return await generateImageStep(stepInput as any);
   }

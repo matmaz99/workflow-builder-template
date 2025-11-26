@@ -1,8 +1,7 @@
 /**
- * Code template for Generate Image action step
- * This is a string template used for code generation - keep as string export
+ * Code generation template for Generate Image action
  */
-export default `import { experimental_generateImage as generateImage } from 'ai';
+export const generateImageCodegenTemplate = `import { experimental_generateImage as generateImage } from 'ai';
 
 export async function generateImageStep(input: {
   model: string;

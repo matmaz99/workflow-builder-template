@@ -5,6 +5,10 @@
  */
 
 import type {
+  generateImageStep,
+  generateTextStep,
+} from "../../plugins/ai-gateway";
+import type {
   firecrawlScrapeStep,
   firecrawlSearchStep,
 } from "../../plugins/firecrawl";
@@ -12,8 +16,6 @@ import type { createTicketStep } from "../../plugins/linear";
 import type { sendEmailStep } from "../../plugins/resend";
 import type { conditionStep } from "./condition";
 import type { databaseQueryStep } from "./database-query";
-import type { generateImageStep } from "./generate-image";
-import type { generateTextStep } from "./generate-text";
 import type { httpRequestStep } from "./http-request";
 import type { logNodeCompleteStep, logNodeStartStep } from "./logging";
 import type { sendSlackMessageStep } from "./send-slack-message";
@@ -52,11 +54,11 @@ export const stepRegistry: Record<string, StepFunction> = {
       input as Parameters<typeof createTicketStep>[0]
     ), // TODO: Implement separate findIssuesStep
   "Generate Text": async (input) =>
-    (await import("./generate-text")).generateTextStep(
+    (await import("../../plugins/ai-gateway")).generateTextStep(
       input as Parameters<typeof generateTextStep>[0]
     ),
   "Generate Image": async (input) =>
-    (await import("./generate-image")).generateImageStep(
+    (await import("../../plugins/ai-gateway")).generateImageStep(
       input as Parameters<typeof generateImageStep>[0]
     ),
   "Log Node Start": async (input) =>
