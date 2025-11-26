@@ -1182,9 +1182,12 @@ export const WorkflowToolbar = ({
       </Panel>
 
       <div
-        className="absolute top-4 right-4 z-10"
+        className="pointer-events-auto fixed top-4 right-4 z-10"
         style={{
-          transform: rightPanelWidth ? `translateX(-${rightPanelWidth})` : undefined,
+          // Use vw units since translateX % is relative to element width, not viewport
+          transform: rightPanelWidth
+            ? `translateX(-${rightPanelWidth.replace("%", "vw")})`
+            : undefined,
           transition: isPanelAnimating ? "transform 300ms ease-out" : undefined,
         }}
       >

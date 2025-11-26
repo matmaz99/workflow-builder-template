@@ -12,9 +12,7 @@ import {
   currentWorkflowNameAtom,
   edgesAtom,
   isGeneratingAtom,
-  isPanelAnimatingAtom,
   nodesAtom,
-  rightPanelWidthAtom,
   selectedNodeAtom,
 } from "@/lib/workflow-store";
 
@@ -36,8 +34,6 @@ export function AIPrompt({ workflowId, onWorkflowCreated }: AIPromptProps) {
   const [_currentWorkflowId, setCurrentWorkflowId] = useAtom(currentWorkflowIdAtom);
   const [_currentWorkflowName, setCurrentWorkflowName] = useAtom(currentWorkflowNameAtom);
   const [_selectedNodeId, setSelectedNodeId] = useAtom(selectedNodeAtom);
-  const rightPanelWidth = useAtomValue(rightPanelWidthAtom);
-  const isPanelAnimating = useAtomValue(isPanelAnimatingAtom);
 
   // Filter out placeholder "add" nodes to get real nodes
   const realNodes = nodes.filter((node) => node.type !== "add");
@@ -283,15 +279,10 @@ export function AIPrompt({ workflowId, onWorkflowCreated }: AIPromptProps) {
       {/* Always visible prompt input */}
       <div 
         ref={containerRef}
-        className="absolute bottom-4 z-10 px-4"
+        className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 px-4"
         style={{
-          // Center within available space (accounting for right panel)
-          left: rightPanelWidth ? `calc((100% - ${rightPanelWidth}) / 2)` : "50%",
-          transform: "translateX(-50%)",
           width: isExpanded ? "min(100%, 42rem)" : "20rem",
-          transition: isPanelAnimating
-            ? "width 150ms ease-out, left 300ms ease-out"
-            : "width 150ms ease-out",
+          transition: "width 150ms ease-out",
         }}
       >
         <form

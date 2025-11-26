@@ -1,6 +1,6 @@
 "use client";
 
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useSetAtom } from "jotai";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -15,11 +15,13 @@ import {
   currentWorkflowIdAtom,
   currentWorkflowNameAtom,
   edgesAtom,
+  hasSidebarBeenShownAtom,
   hasUnsavedChangesAtom,
   isExecutingAtom,
   isGeneratingAtom,
   isPanelAnimatingAtom,
   isSavingAtom,
+  isSidebarCollapsedAtom,
   nodesAtom,
   propertiesPanelActiveTabAtom,
   rightPanelWidthAtom,
@@ -58,20 +60,85 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
   const setActiveTab = useSetAtom(propertiesPanelActiveTabAtom);
   const setRightPanelWidth = useSetAtom(rightPanelWidthAtom);
   const setIsPanelAnimating = useSetAtom(isPanelAnimatingAtom);
+  const [hasSidebarBeenShown, setHasSidebarBeenShown] = useAtom(
+    hasSidebarBeenShownAtom
+  );
+  const [panelCollapsed, setPanelCollapsed] = useAtom(isSidebarCollapsedAtom);
 
   // Panel width state for resizing
-  const [panelWidth, setPanelWidth] = useState(30); // percentage
-  const [panelVisible, setPanelVisible] = useState(false); // for slide-in animation
-  const [panelCollapsed, setPanelCollapsed] = useState(false); // for collapse/expand
+  const [panelWidth, setPanelWidth] = useState(30); // default percentage
+  // Start visible if sidebar has already been shown (switching between workflows)
+  const [panelVisible, setPanelVisible] = useState(hasSidebarBeenShown);
   const [isDraggingResize, setIsDraggingResize] = useState(false);
   const isResizing = useRef(false);
+  const hasReadCookies = useRef(false);
 
-  // Trigger slide-in animation on mount
+  // Read sidebar preferences from cookies on mount (after hydration)
   useEffect(() => {
+    if (hasReadCookies.current) {
+      return;
+    }
+    hasReadCookies.current = true;
+
+    // Read width
+    const widthCookie = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("sidebar-width="));
+    if (widthCookie) {
+      const value = parseFloat(widthCookie.split("=")[1]);
+      if (!Number.isNaN(value) && value >= 20 && value <= 50) {
+        setPanelWidth(value);
+      }
+    }
+
+    // Read collapsed state
+    const collapsedCookie = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("sidebar-collapsed="));
+    if (collapsedCookie) {
+      setPanelCollapsed(collapsedCookie.split("=")[1] === "true");
+    }
+  }, [setPanelCollapsed]);
+
+  // Save sidebar width to cookie when it changes (skip initial render)
+  const hasInitialized = useRef(false);
+  useEffect(() => {
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      return;
+    }
+    document.cookie = `sidebar-width=${panelWidth}; path=/; max-age=31536000`; // 1 year
+  }, [panelWidth]);
+
+  // Save collapsed state to cookie when it changes
+  useEffect(() => {
+    if (!hasReadCookies.current) {
+      return;
+    }
+    document.cookie = `sidebar-collapsed=${panelCollapsed}; path=/; max-age=31536000`; // 1 year
+  }, [panelCollapsed]);
+
+  // Trigger slide-in animation on mount (only for homepage -> workflow transition)
+  useEffect(() => {
+    // Check if we came from homepage
+    const shouldAnimate = sessionStorage.getItem("animate-sidebar") === "true";
+    sessionStorage.removeItem("animate-sidebar");
+
+    // Skip animation if sidebar has already been shown (switching between workflows)
+    // or if we didn't come from homepage (direct load, refresh)
+    if (hasSidebarBeenShown || !shouldAnimate) {
+      setPanelVisible(true);
+      setHasSidebarBeenShown(true);
+      return;
+    }
+
     // Set animating state before starting
     setIsPanelAnimating(true);
     // Small delay to ensure the panel renders off-screen first
-    const timer = setTimeout(() => setPanelVisible(true), 50);
+    const timer = setTimeout(() => {
+      setPanelVisible(true);
+      setHasSidebarBeenShown(true);
+    }, 50);
     // Clear animating state after animation completes (300ms + buffer)
     const animationTimer = setTimeout(() => setIsPanelAnimating(false), 400);
     return () => {
@@ -79,7 +146,7 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
       clearTimeout(animationTimer);
       setIsPanelAnimating(false);
     };
-  }, [setIsPanelAnimating]);
+  }, [hasSidebarBeenShown, setHasSidebarBeenShown, setIsPanelAnimating]);
 
   // Keyboard shortcut Cmd/Ctrl+B to toggle sidebar
   useEffect(() => {
@@ -116,9 +183,12 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
     isResizing.current = true;
     setIsDraggingResize(true);
 
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing.current) return;
-      const newWidth = ((window.innerWidth - e.clientX) / window.innerWidth) * 100;
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizing.current) {
+        return;
+      }
+      const newWidth =
+        ((window.innerWidth - moveEvent.clientX) / window.innerWidth) * 100;
       // Clamp between 20% and 50%
       setPanelWidth(Math.min(50, Math.max(20, newWidth)));
     };
@@ -615,7 +685,7 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
       {/* Expand button when panel is collapsed */}
       {!isMobile && panelCollapsed && (
         <button
-          className="pointer-events-auto absolute top-1/2 right-0 z-20 flex size-6 -translate-y-1/2 items-center justify-center rounded-l-full border border-r-0 bg-background shadow-sm transition-colors hover:bg-muted"
+          className="-translate-y-1/2 pointer-events-auto absolute top-1/2 right-0 z-20 flex size-6 items-center justify-center rounded-l-full border border-r-0 bg-background shadow-sm transition-colors hover:bg-muted"
           onClick={() => {
             setIsPanelAnimating(true);
             setPanelCollapsed(false);
@@ -640,16 +710,21 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
           }}
         >
           {/* Resize handle with collapse button */}
+          {/* biome-ignore lint/a11y/useSemanticElements: custom resize handle */}
           <div
+            aria-orientation="vertical"
+            aria-valuenow={panelWidth}
             className="group absolute inset-y-0 left-0 z-10 w-3 cursor-col-resize"
             onMouseDown={handleResizeStart}
+            role="separator"
+            tabIndex={0}
           >
             {/* Hover indicator */}
             <div className="absolute inset-y-0 left-0 w-1 bg-transparent transition-colors group-hover:bg-blue-500 group-active:bg-blue-600" />
             {/* Collapse button - hidden while resizing */}
             {!isDraggingResize && (
               <button
-                className="absolute top-1/2 left-0 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border bg-background opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:bg-muted"
+                className="-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-0 flex size-6 items-center justify-center rounded-full border bg-background opacity-0 shadow-sm transition-opacity hover:bg-muted group-hover:opacity-100"
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsPanelAnimating(true);

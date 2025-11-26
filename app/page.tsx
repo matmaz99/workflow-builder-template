@@ -1,6 +1,5 @@
 "use client";
 
-import { useReactFlow } from "@xyflow/react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { nanoid } from "nanoid";
 import { useRouter } from "next/navigation";
@@ -13,6 +12,7 @@ import {
   currentWorkflowIdAtom,
   currentWorkflowNameAtom,
   edgesAtom,
+  hasSidebarBeenShownAtom,
   nodesAtom,
   type WorkflowNode,
 } from "@/lib/workflow-store";
@@ -36,15 +36,20 @@ function createDefaultTriggerNode() {
 const Home = () => {
   const router = useRouter();
   const { data: session } = useSession();
-  const { getViewport } = useReactFlow();
   const nodes = useAtomValue(nodesAtom);
   const edges = useAtomValue(edgesAtom);
   const currentWorkflowId = useAtomValue(currentWorkflowIdAtom);
   const setNodes = useSetAtom(nodesAtom);
   const setEdges = useSetAtom(edgesAtom);
   const setCurrentWorkflowName = useSetAtom(currentWorkflowNameAtom);
+  const setHasSidebarBeenShown = useSetAtom(hasSidebarBeenShownAtom);
   const hasCreatedWorkflowRef = useRef(false);
   const currentWorkflowName = useAtomValue(currentWorkflowNameAtom);
+
+  // Reset sidebar animation state when on homepage
+  useEffect(() => {
+    setHasSidebarBeenShown(false);
+  }, [setHasSidebarBeenShown]);
 
   // Update page title when workflow name changes
   useEffect(() => {
@@ -109,16 +114,8 @@ const Home = () => {
           edges,
         });
 
-        // Save current viewport for the new workflow before navigating
-        const viewport = getViewport();
-        console.log("[Homepage] Saving viewport before navigation", {
-          workflowId: newWorkflow.id,
-          viewport,
-        });
-        localStorage.setItem(
-          `workflow-viewport-${newWorkflow.id}`,
-          JSON.stringify(viewport)
-        );
+        // Set flag to indicate we're coming from homepage (for sidebar animation)
+        sessionStorage.setItem("animate-sidebar", "true");
 
         // Redirect to the workflow page
         console.log("[Homepage] Navigating to workflow page");
@@ -130,7 +127,7 @@ const Home = () => {
     };
 
     createWorkflowAndRedirect();
-  }, [nodes, edges, router, ensureSession, getViewport]);
+  }, [nodes, edges, router, ensureSession]);
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden">

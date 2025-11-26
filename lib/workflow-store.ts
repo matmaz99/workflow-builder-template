@@ -34,6 +34,8 @@ export const showMinimapAtom = atom(false);
 export const selectedExecutionIdAtom = atom<string | null>(null);
 export const rightPanelWidthAtom = atom<string | null>(null);
 export const isPanelAnimatingAtom = atom<boolean>(false);
+export const hasSidebarBeenShownAtom = atom<boolean>(false);
+export const isSidebarCollapsedAtom = atom<boolean>(false);
 
 // Execution log entry type for storing run outputs per node
 export type ExecutionLogEntry = {
