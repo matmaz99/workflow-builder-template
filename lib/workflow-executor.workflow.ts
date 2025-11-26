@@ -95,7 +95,7 @@ async function executeActionStep(input: {
     return await sendEmailStep(stepInput as any);
   }
   if (actionType === "Send Slack Message") {
-    const { sendSlackMessageStep } = await import("./steps/send-slack-message");
+    const { sendSlackMessageStep } = await import("../plugins/slack");
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
     return await sendSlackMessageStep(stepInput as any);
   }

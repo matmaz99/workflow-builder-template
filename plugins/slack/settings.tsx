@@ -1,27 +1,19 @@
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-type SlackSettingsProps = {
+export function SlackSettings({
+  apiKey,
+  hasKey,
+  onApiKeyChange,
+}: {
   apiKey: string;
   hasKey?: boolean;
   onApiKeyChange: (key: string) => void;
   showCard?: boolean;
-};
-
-export const SlackSettings = ({
-  apiKey,
-  hasKey,
-  onApiKeyChange,
-  showCard = true,
-}: SlackSettingsProps) => {
-  const content = (
+  config?: Record<string, string>;
+  onConfigChange?: (key: string, value: string) => void;
+}) {
+  return (
     <div className="space-y-4">
       <div className="space-y-2">
         <Label className="ml-1" htmlFor="slackApiKey">
@@ -51,20 +43,5 @@ export const SlackSettings = ({
       </div>
     </div>
   );
+}
 
-  if (!showCard) {
-    return content;
-  }
-
-  return (
-    <Card className="gap-4 border-0 py-0 shadow-none">
-      <CardHeader className="px-0">
-        <CardTitle>Slack</CardTitle>
-        <CardDescription>
-          Configure your Slack Bot Token to send messages from workflows
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="px-0">{content}</CardContent>
-    </Card>
-  );
-};

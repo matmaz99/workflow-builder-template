@@ -1,8 +1,7 @@
 /**
- * Code template for Send Slack Message action step
- * This is a string template used for code generation - keep as string export
+ * Code generation template for Send Slack Message action
  */
-export default `import { WebClient } from '@slack/web-api';
+export const sendSlackMessageCodegenTemplate = `import { WebClient } from '@slack/web-api';
 
 export async function sendSlackMessageStep(input: {
   slackChannel: string;
@@ -19,3 +18,4 @@ export async function sendSlackMessageStep(input: {
   
   return result;
 }`;
+

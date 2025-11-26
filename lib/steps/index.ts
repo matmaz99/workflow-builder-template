@@ -14,11 +14,11 @@ import type {
 } from "../../plugins/firecrawl";
 import type { createTicketStep } from "../../plugins/linear";
 import type { sendEmailStep } from "../../plugins/resend";
+import type { sendSlackMessageStep } from "../../plugins/slack";
 import type { conditionStep } from "./condition";
 import type { databaseQueryStep } from "./database-query";
 import type { httpRequestStep } from "./http-request";
 import type { logNodeCompleteStep, logNodeStartStep } from "./logging";
-import type { sendSlackMessageStep } from "./send-slack-message";
 
 // Step function type
 export type StepFunction = (input: Record<string, unknown>) => Promise<unknown>;
@@ -42,7 +42,7 @@ export const stepRegistry: Record<string, StepFunction> = {
       input as Parameters<typeof sendEmailStep>[0]
     ),
   "Send Slack Message": async (input) =>
-    (await import("./send-slack-message")).sendSlackMessageStep(
+    (await import("../../plugins/slack")).sendSlackMessageStep(
       input as Parameters<typeof sendSlackMessageStep>[0]
     ),
   "Create Ticket": async (input) =>
