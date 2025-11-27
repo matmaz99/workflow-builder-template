@@ -3,7 +3,9 @@
  * This executor captures step executions through the workflow SDK for better observability
  */
 
+import { type StepContext, stepHandler } from "./steps/step-handler";
 import { getErrorMessageAsync } from "./utils";
+import { redactSensitiveData } from "./utils/redact";
 import type { WorkflowEdge, WorkflowNode } from "./workflow-store";
 
 type ExecutionResult = {
@@ -23,7 +25,7 @@ export type WorkflowExecutionInput = {
 };
 
 /**
- * Execute a single action step
+ * Execute a single action step with logging via stepHandler
  * IMPORTANT: Steps receive only the integration ID as a reference to fetch credentials.
  * This prevents credentials from being logged in Vercel's workflow observability.
  */
@@ -32,8 +34,9 @@ async function executeActionStep(input: {
   actionType: string;
   config: Record<string, unknown>;
   outputs: NodeOutputs;
+  context: StepContext;
 }) {
-  const { actionType, config } = input;
+  const { actionType, config, context } = input;
 
   // Helper to replace template variables in conditions
   // biome-ignore lint/nursery/useMaxParams: Helper function needs all parameters for template replacement
@@ -94,52 +97,52 @@ async function executeActionStep(input: {
     // integrationId is already in config from the node configuration
   };
 
-  // Import and execute the appropriate step function
+  // Import and execute the appropriate step function with stepHandler for logging
   // Step functions load credentials from process.env themselves
   if (actionType === "Send Email") {
     const { sendEmailStep } = await import(
       "../plugins/resend/steps/send-email/step"
     );
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await sendEmailStep(stepInput as any);
+    return await stepHandler(sendEmailStep, stepInput as any, context);
   }
   if (actionType === "Send Slack Message") {
     const { sendSlackMessageStep } = await import(
       "../plugins/slack/steps/send-slack-message/step"
     );
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await sendSlackMessageStep(stepInput as any);
+    return await stepHandler(sendSlackMessageStep, stepInput as any, context);
   }
   if (actionType === "Create Ticket") {
     const { createTicketStep } = await import(
       "../plugins/linear/steps/create-ticket/step"
     );
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await createTicketStep(stepInput as any);
+    return await stepHandler(createTicketStep, stepInput as any, context);
   }
   if (actionType === "Generate Text") {
     const { generateTextStep } = await import(
       "../plugins/ai-gateway/steps/generate-text/step"
     );
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await generateTextStep(stepInput as any);
+    return await stepHandler(generateTextStep, stepInput as any, context);
   }
   if (actionType === "Generate Image") {
     const { generateImageStep } = await import(
       "../plugins/ai-gateway/steps/generate-image/step"
     );
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await generateImageStep(stepInput as any);
+    return await stepHandler(generateImageStep, stepInput as any, context);
   }
   if (actionType === "Database Query") {
     const { databaseQueryStep } = await import("./steps/database-query");
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await databaseQueryStep(stepInput as any);
+    return await stepHandler(databaseQueryStep, stepInput as any, context);
   }
   if (actionType === "HTTP Request") {
     const { httpRequestStep } = await import("./steps/http-request");
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await httpRequestStep(stepInput as any);
+    return await stepHandler(httpRequestStep, stepInput as any, context);
   }
   if (actionType === "Condition") {
     const { conditionStep } = await import("./steps/condition");
@@ -193,8 +196,11 @@ async function executeActionStep(input: {
 
     console.log("[Condition] Final result:", evaluatedCondition);
 
-    // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await conditionStep({ condition: evaluatedCondition } as any);
+    return await stepHandler(
+      conditionStep,
+      { condition: evaluatedCondition },
+      context
+    );
   }
 
   if (actionType === "Scrape") {
@@ -202,14 +208,14 @@ async function executeActionStep(input: {
       "../plugins/firecrawl/steps/scrape/step"
     );
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await firecrawlScrapeStep(stepInput as any);
+    return await stepHandler(firecrawlScrapeStep, stepInput as any, context);
   }
   if (actionType === "Search") {
     const { firecrawlSearchStep } = await import(
       "../plugins/firecrawl/steps/search/step"
     );
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await firecrawlSearchStep(stepInput as any);
+    return await stepHandler(firecrawlSearchStep, stepInput as any, context);
   }
 
   // Fallback for unknown action types
@@ -337,75 +343,95 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
     "trigger nodes"
   );
 
-  // Helper to log node start
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Node name derivation requires type checking
-  async function logNodeStart(
+  // Helper to get a meaningful node name
+  function getNodeName(node: WorkflowNode): string {
+    if (node.data.label) {
+      return node.data.label;
+    }
+    if (node.data.type === "action") {
+      return (node.data.config?.actionType as string) || "Action";
+    }
+    if (node.data.type === "trigger") {
+      return (node.data.config?.triggerType as string) || "Trigger";
+    }
+    return node.data.type;
+  }
+
+  // Helper to log trigger nodes (not using stepHandler since triggers aren't steps)
+  async function logTriggerStart(
     node: WorkflowNode,
-    nodeInput?: unknown
+    triggerData: unknown
   ): Promise<{ logId: string; startTime: number }> {
     if (!executionId) {
       return { logId: "", startTime: Date.now() };
     }
 
     try {
-      // Get a meaningful node name
-      let nodeName = node.data.label;
-      if (!nodeName) {
-        if (node.data.type === "action") {
-          nodeName = (node.data.config?.actionType as string) || "Action";
-        } else if (node.data.type === "trigger") {
-          nodeName = (node.data.config?.triggerType as string) || "Trigger";
-        } else {
-          nodeName = node.data.type;
+      const redactedInput = redactSensitiveData(triggerData);
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/workflow-log`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "start",
+            data: {
+              executionId,
+              nodeId: node.id,
+              nodeName: getNodeName(node),
+              nodeType: node.data.type,
+              input: redactedInput,
+            },
+          }),
         }
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+        return {
+          logId: result.logId || "",
+          startTime: result.startTime || Date.now(),
+        };
       }
-
-      const { logStep } = await import("./steps/log-step");
-      const result = await logStep({
-        action: "start",
-        executionId,
-        nodeId: node.id,
-        nodeName,
-        nodeType: node.data.type,
-        nodeInput,
-      });
-
-      return {
-        logId: result.logId || "",
-        startTime: result.startTime || Date.now(),
-      };
+      return { logId: "", startTime: Date.now() };
     } catch (error) {
-      console.error("[Workflow Executor] Failed to log node start:", error);
+      console.error("[Workflow Executor] Failed to log trigger start:", error);
       return { logId: "", startTime: Date.now() };
     }
   }
 
-  // Helper to log node completion
-  async function logNodeComplete(options: {
+  // Helper to complete trigger logging
+  async function logTriggerComplete(options: {
     logId: string;
     startTime: number;
     status: "success" | "error";
     output?: unknown;
     error?: string;
   }): Promise<void> {
-    if (!(executionId && options.logId)) {
+    if (!options.logId) {
       return;
     }
 
     try {
-      const { logStep } = await import("./steps/log-step");
-      await logStep({
-        action: "complete",
-        logId: options.logId,
-        startTime: options.startTime,
-        status: options.status,
-        output: options.output,
-        error: options.error,
+      const redactedOutput = redactSensitiveData(options.output);
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/workflow-log`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "complete",
+          data: {
+            logId: options.logId,
+            startTime: options.startTime,
+            status: options.status,
+            output: redactedOutput,
+            error: options.error,
+          },
+        }),
       });
-    } catch (logError) {
+    } catch (error) {
       console.error(
-        "[Workflow Executor] Failed to log node completion:",
-        logError
+        "[Workflow Executor] Failed to log trigger completion:",
+        error
       );
     }
   }
@@ -445,8 +471,6 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
       return;
     }
 
-    let logInfo = { logId: "", startTime: Date.now() };
-
     try {
       let result: ExecutionResult;
 
@@ -484,14 +508,15 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           triggerData = { ...triggerData, ...triggerInput };
         }
 
-        logInfo = await logNodeStart(node, triggerData);
+        // Log trigger execution (not via stepHandler since triggers aren't steps)
+        const logInfo = await logTriggerStart(node, triggerData);
 
         result = {
           success: true,
           data: triggerData,
         };
 
-        await logNodeComplete({
+        await logTriggerComplete({
           logId: logInfo.logId,
           startTime: logInfo.startTime,
           status: "success",
@@ -509,14 +534,6 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
             success: false,
             error: `Action node "${node.data.label || node.id}" has no action type configured`,
           };
-
-          await logNodeComplete({
-            logId: logInfo.logId,
-            startTime: logInfo.startTime,
-            status: "error",
-            error: result.error,
-          });
-
           results[nodeId] = result;
           return;
         }
@@ -536,11 +553,15 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           processedConfig.condition = originalCondition;
         }
 
-        // Log the input BEFORE enriching with credentials
-        // This ensures API keys are never stored in logs
-        logInfo = await logNodeStart(node, processedConfig);
+        // Build step context for logging (stepHandler will handle the logging)
+        const stepContext: StepContext = {
+          executionId,
+          nodeId: node.id,
+          nodeName: getNodeName(node),
+          nodeType: node.data.type,
+        };
 
-        // Execute the action step
+        // Execute the action step with stepHandler (logging is handled inside)
         // IMPORTANT: We pass integrationId via config, not actual credentials
         // Steps fetch credentials internally using fetchCredentials(integrationId)
         console.log("[Workflow Executor] Calling executeActionStep");
@@ -548,6 +569,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           actionType,
           config: processedConfig,
           outputs,
+          context: stepContext,
         });
 
         console.log("[Workflow Executor] Step result received:", {
@@ -568,26 +590,11 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
             success: false,
             error: errorResult.error || "Step execution failed",
           };
-
-          await logNodeComplete({
-            logId: logInfo.logId,
-            startTime: logInfo.startTime,
-            status: "error",
-            output: stepResult,
-            error: result.error,
-          });
         } else {
           result = {
             success: true,
             data: stepResult,
           };
-
-          await logNodeComplete({
-            logId: logInfo.logId,
-            startTime: logInfo.startTime,
-            status: "success",
-            output: result.data,
-          });
         }
       } else {
         console.log("[Workflow Executor] Unknown node type:", node.data.type);
@@ -595,13 +602,6 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           success: false,
           error: `Unknown node type: ${node.data.type}`,
         };
-
-        await logNodeComplete({
-          logId: logInfo.logId,
-          startTime: logInfo.startTime,
-          status: "error",
-          error: result.error,
-        });
       }
 
       // Store results
@@ -673,13 +673,8 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
         error: errorMessage,
       };
       results[nodeId] = errorResult;
-
-      await logNodeComplete({
-        logId: logInfo.logId,
-        startTime: logInfo.startTime,
-        status: "error",
-        error: errorResult.error,
-      });
+      // Note: stepHandler already logged the error for action steps
+      // Trigger steps don't throw, so this catch is mainly for unexpected errors
     }
   }
 
@@ -702,14 +697,22 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
     // Update execution record if we have an executionId
     if (executionId) {
       try {
-        const { logStep } = await import("./steps/log-step");
-        await logStep({
-          action: "complete",
-          executionId,
-          status: finalSuccess ? "success" : "error",
-          output: Object.values(results).at(-1)?.data,
-          error: Object.values(results).find((r) => !r.success)?.error,
-          startTime: workflowStartTime,
+        const redactedOutput = redactSensitiveData(
+          Object.values(results).at(-1)?.data
+        );
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/workflow-log`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "complete",
+            data: {
+              executionId,
+              status: finalSuccess ? "success" : "error",
+              output: redactedOutput,
+              error: Object.values(results).find((r) => !r.success)?.error,
+              startTime: workflowStartTime,
+            },
+          }),
         });
         console.log("[Workflow Executor] Updated execution record");
       } catch (error) {
@@ -736,13 +739,18 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
     // Update execution record with error if we have an executionId
     if (executionId) {
       try {
-        const { logStep } = await import("./steps/log-step");
-        await logStep({
-          action: "complete",
-          executionId,
-          status: "error",
-          error: errorMessage,
-          startTime: Date.now(),
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/workflow-log`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "complete",
+            data: {
+              executionId,
+              status: "error",
+              error: errorMessage,
+              startTime: Date.now(),
+            },
+          }),
         });
       } catch (logError) {
         console.error("[Workflow Executor] Failed to log error:", logError);
