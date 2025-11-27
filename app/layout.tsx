@@ -3,6 +3,7 @@ import "./globals.css";
 import { ReactFlowProvider } from "@xyflow/react";
 import { Provider } from "jotai";
 import type { ReactNode } from "react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AuthProvider } from "@/components/auth/provider";
 import { GitHubStarsProvider } from "@/components/github-stars-provider";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -83,6 +84,7 @@ const RootLayout = async ({ children }: RootLayoutProps) => {
             </AuthProvider>
           </Provider>
         </ThemeProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
