@@ -3,11 +3,20 @@
  */
 import "server-only";
 
+import { type StepContext, withStepLogging } from "./step-handler";
+
+export type ConditionInput = {
+  condition: boolean;
+  _context?: StepContext;
+};
+
 // biome-ignore lint/suspicious/useAwait: workflow "use step" requires async
-export async function conditionStep(input: { condition: boolean }): Promise<{
+export async function conditionStep(input: ConditionInput): Promise<{
   condition: boolean;
 }> {
   "use step";
 
-  return { condition: input.condition };
+  return withStepLogging(input._context, input, () =>
+    Promise.resolve({ condition: input.condition })
+  );
 }

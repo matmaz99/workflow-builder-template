@@ -1,6 +1,7 @@
 /**
- * Step Handler - Wraps step execution with logging for the workflow builder UI
- * This is NOT a step itself, it's a wrapper that handles logging transparently
+ * Step Handler - Logging utilities for workflow builder UI
+ * These functions are called FROM INSIDE steps (within "use step" context)
+ * where fetch is available
  */
 import "server-only";
 
@@ -13,19 +14,20 @@ export type StepContext = {
   nodeType: string;
 };
 
-type LogStartResult = {
+type LogInfo = {
   logId: string;
   startTime: number;
 };
 
 /**
- * Log the start of a step execution (not a step itself)
+ * Log the start of a step execution
+ * Must be called from within a "use step" context
  */
-async function logStepStart(
-  context: StepContext,
+export async function logStepStart(
+  context: StepContext | undefined,
   input: unknown
-): Promise<LogStartResult> {
-  if (!context.executionId) {
+): Promise<LogInfo> {
+  if (!context?.executionId) {
     return { logId: "", startTime: Date.now() };
   }
 
@@ -66,21 +68,21 @@ async function logStepStart(
 }
 
 /**
- * Log the completion of a step execution (not a step itself)
+ * Log the completion of a step execution
+ * Must be called from within a "use step" context
  */
-async function logStepComplete(options: {
-  logId: string;
-  startTime: number;
-  status: "success" | "error";
-  output?: unknown;
-  error?: string;
-}): Promise<void> {
-  if (!options.logId) {
+export async function logStepComplete(
+  logInfo: LogInfo,
+  status: "success" | "error",
+  output?: unknown,
+  error?: string
+): Promise<void> {
+  if (!logInfo.logId) {
     return;
   }
 
   try {
-    const redactedOutput = redactSensitiveData(options.output);
+    const redactedOutput = redactSensitiveData(output);
 
     await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/workflow-log`, {
       method: "POST",
@@ -88,36 +90,43 @@ async function logStepComplete(options: {
       body: JSON.stringify({
         action: "complete",
         data: {
-          logId: options.logId,
-          startTime: options.startTime,
-          status: options.status,
+          logId: logInfo.logId,
+          startTime: logInfo.startTime,
+          status,
           output: redactedOutput,
-          error: options.error,
+          error,
         },
       }),
     });
-  } catch (error) {
-    console.error("[stepHandler] Failed to log completion:", error);
+  } catch (err) {
+    console.error("[stepHandler] Failed to log completion:", err);
   }
 }
 
 /**
- * Wrap a step function with logging
- * This handles logging before and after step execution without being a step itself
+ * Helper to wrap step logic with logging
+ * Call this from inside your step function (within "use step" context)
+ *
+ * @example
+ * export async function myStep(input: MyInput & { _context?: StepContext }) {
+ *   "use step";
+ *   return withStepLogging(input._context, input, async () => {
+ *     // your step logic here
+ *     return { success: true, data: ... };
+ *   });
+ * }
  */
-export async function stepHandler<TInput, TOutput>(
-  stepFn: (stepInput: TInput) => Promise<TOutput>,
-  input: TInput,
-  context: StepContext
+export async function withStepLogging<TOutput>(
+  context: StepContext | undefined,
+  input: unknown,
+  stepLogic: () => Promise<TOutput>
 ): Promise<TOutput> {
-  // Log the start
-  const { logId, startTime } = await logStepStart(context, input);
+  const logInfo = await logStepStart(context, input);
 
   try {
-    // Execute the actual step
-    const result = await stepFn(input);
+    const result = await stepLogic();
 
-    // Check if the result indicates an error
+    // Check if result indicates an error
     const isErrorResult =
       result &&
       typeof result === "object" &&
@@ -126,35 +135,21 @@ export async function stepHandler<TInput, TOutput>(
 
     if (isErrorResult) {
       const errorResult = result as { success: false; error?: string };
-      await logStepComplete({
-        logId,
-        startTime,
-        status: "error",
-        output: result,
-        error: errorResult.error || "Step execution failed",
-      });
+      await logStepComplete(
+        logInfo,
+        "error",
+        result,
+        errorResult.error || "Step execution failed"
+      );
     } else {
-      await logStepComplete({
-        logId,
-        startTime,
-        status: "success",
-        output: result,
-      });
+      await logStepComplete(logInfo, "success", result);
     }
 
     return result;
   } catch (error) {
-    // Log the error
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
-    await logStepComplete({
-      logId,
-      startTime,
-      status: "error",
-      error: errorMessage,
-    });
-
-    // Re-throw the error
+    await logStepComplete(logInfo, "error", undefined, errorMessage);
     throw error;
   }
 }

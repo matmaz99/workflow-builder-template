@@ -3,7 +3,7 @@
  * This executor captures step executions through the workflow SDK for better observability
  */
 
-import { type StepContext, stepHandler } from "./steps/step-handler";
+import type { StepContext } from "./steps/step-handler";
 import { getErrorMessageAsync } from "./utils";
 import { redactSensitiveData } from "./utils/redact";
 import type { WorkflowEdge, WorkflowNode } from "./workflow-store";
@@ -90,59 +90,61 @@ async function executeActionStep(input: {
     return varName;
   }
 
-  // Build step input WITHOUT credentials, but WITH integrationId reference
+  // Build step input WITHOUT credentials, but WITH integrationId reference and logging context
   // Steps will fetch credentials internally using this reference
+  // Steps handle their own logging via withStepLogging using _context
   const stepInput: Record<string, unknown> = {
     ...config,
-    // integrationId is already in config from the node configuration
+    _context: context,
   };
 
-  // Import and execute the appropriate step function with stepHandler for logging
+  // Import and execute the appropriate step function
   // Step functions load credentials from process.env themselves
+  // Each step handles its own logging internally via withStepLogging
   if (actionType === "Send Email") {
     const { sendEmailStep } = await import(
       "../plugins/resend/steps/send-email/step"
     );
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await stepHandler(sendEmailStep, stepInput as any, context);
+    return await sendEmailStep(stepInput as any);
   }
   if (actionType === "Send Slack Message") {
     const { sendSlackMessageStep } = await import(
       "../plugins/slack/steps/send-slack-message/step"
     );
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await stepHandler(sendSlackMessageStep, stepInput as any, context);
+    return await sendSlackMessageStep(stepInput as any);
   }
   if (actionType === "Create Ticket") {
     const { createTicketStep } = await import(
       "../plugins/linear/steps/create-ticket/step"
     );
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await stepHandler(createTicketStep, stepInput as any, context);
+    return await createTicketStep(stepInput as any);
   }
   if (actionType === "Generate Text") {
     const { generateTextStep } = await import(
       "../plugins/ai-gateway/steps/generate-text/step"
     );
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await stepHandler(generateTextStep, stepInput as any, context);
+    return await generateTextStep(stepInput as any);
   }
   if (actionType === "Generate Image") {
     const { generateImageStep } = await import(
       "../plugins/ai-gateway/steps/generate-image/step"
     );
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await stepHandler(generateImageStep, stepInput as any, context);
+    return await generateImageStep(stepInput as any);
   }
   if (actionType === "Database Query") {
     const { databaseQueryStep } = await import("./steps/database-query");
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await stepHandler(databaseQueryStep, stepInput as any, context);
+    return await databaseQueryStep(stepInput as any);
   }
   if (actionType === "HTTP Request") {
     const { httpRequestStep } = await import("./steps/http-request");
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await stepHandler(httpRequestStep, stepInput as any, context);
+    return await httpRequestStep(stepInput as any);
   }
   if (actionType === "Condition") {
     const { conditionStep } = await import("./steps/condition");
@@ -196,11 +198,10 @@ async function executeActionStep(input: {
 
     console.log("[Condition] Final result:", evaluatedCondition);
 
-    return await stepHandler(
-      conditionStep,
-      { condition: evaluatedCondition },
-      context
-    );
+    return await conditionStep({
+      condition: evaluatedCondition,
+      _context: context,
+    });
   }
 
   if (actionType === "Scrape") {
@@ -208,14 +209,14 @@ async function executeActionStep(input: {
       "../plugins/firecrawl/steps/scrape/step"
     );
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await stepHandler(firecrawlScrapeStep, stepInput as any, context);
+    return await firecrawlScrapeStep(stepInput as any);
   }
   if (actionType === "Search") {
     const { firecrawlSearchStep } = await import(
       "../plugins/firecrawl/steps/search/step"
     );
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic step input type
-    return await stepHandler(firecrawlSearchStep, stepInput as any, context);
+    return await firecrawlSearchStep(stepInput as any);
   }
 
   // Fallback for unknown action types
