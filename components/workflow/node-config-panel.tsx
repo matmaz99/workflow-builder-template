@@ -168,6 +168,9 @@ export const PanelInner = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useAtom(propertiesPanelActiveTabAtom);
   const refreshRunsRef = useRef<(() => Promise<void>) | null>(null);
+  const autoSelectAbortControllersRef = useRef<Record<string, AbortController>>(
+    {}
+  );
   const selectedNode = nodes.find((node) => node.id === selectedNodeId);
   const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId);
 
@@ -263,7 +266,8 @@ export const PanelInner = () => {
     async (
       nodeId: string,
       actionType: string,
-      currentConfig: Record<string, unknown>
+      currentConfig: Record<string, unknown>,
+      abortSignal: AbortSignal
     ) => {
       // Get integration type - check plugin registry first, then system actions
       const action = findActionById(actionType);
@@ -283,10 +287,16 @@ export const PanelInner = () => {
 
       try {
         const all = await api.integration.getAll();
+
+        // Check if this operation was aborted (actionType changed)
+        if (abortSignal.aborted) {
+          return;
+        }
+
         const filtered = all.filter((i) => i.type === integrationType);
 
         // Auto-select if only one integration exists
-        if (filtered.length === 1) {
+        if (filtered.length === 1 && !abortSignal.aborted) {
           const newConfig = {
             ...currentConfig,
             actionType,
@@ -297,12 +307,14 @@ export const PanelInner = () => {
       } catch (error) {
         console.error("Failed to auto-select integration:", error);
       } finally {
-        // Always remove from pending set when done
-        setPendingIntegrationNodes((prev: Set<string>) => {
-          const next = new Set(prev);
-          next.delete(nodeId);
-          return next;
-        });
+        // Always remove from pending set when done (unless aborted)
+        if (!abortSignal.aborted) {
+          setPendingIntegrationNodes((prev: Set<string>) => {
+            const next = new Set(prev);
+            next.delete(nodeId);
+            return next;
+          });
+        }
       }
     },
     [updateNodeData, setPendingIntegrationNodes]
@@ -315,11 +327,27 @@ export const PanelInner = () => {
 
       // When action type is set, auto-select integration if only one exists
       if (key === "actionType" && !selectedNode.data.config?.integrationId) {
+        // Cancel any pending auto-select operation for this node
+        const existingController =
+          autoSelectAbortControllersRef.current[selectedNode.id];
+        if (existingController) {
+          existingController.abort();
+        }
+
+        // Create new AbortController for this operation
+        const newController = new AbortController();
+        autoSelectAbortControllersRef.current[selectedNode.id] = newController;
+
         // Add to pending set before starting async check
         setPendingIntegrationNodes((prev: Set<string>) =>
           new Set(prev).add(selectedNode.id)
         );
-        autoSelectIntegration(selectedNode.id, value, newConfig);
+        autoSelectIntegration(
+          selectedNode.id,
+          value,
+          newConfig,
+          newController.signal
+        );
       }
     }
   };
