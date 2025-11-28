@@ -24,6 +24,7 @@ import { IntegrationIcon } from "@/components/ui/integration-icon";
 import { cn } from "@/lib/utils";
 import {
   executionLogsAtom,
+  pendingIntegrationNodesAtom,
   selectedExecutionIdAtom,
   type WorkflowNodeData,
 } from "@/lib/workflow-store";
@@ -238,6 +239,7 @@ type ActionNodeProps = NodeProps & {
 export const ActionNode = memo(({ data, selected, id }: ActionNodeProps) => {
   const selectedExecutionId = useAtomValue(selectedExecutionIdAtom);
   const executionLogs = useAtomValue(executionLogsAtom);
+  const pendingIntegrationNodes = useAtomValue(pendingIntegrationNodesAtom);
 
   if (!data) {
     return null;
@@ -292,8 +294,12 @@ export const ActionNode = memo(({ data, selected, id }: ActionNodeProps) => {
     data.description || getIntegrationFromActionType(actionType);
 
   const needsIntegration = requiresIntegration(actionType);
+  // Don't show missing indicator if we're still checking for auto-select
+  const isPendingIntegrationCheck = pendingIntegrationNodes.has(id);
   const integrationMissing =
-    needsIntegration && !hasIntegrationConfigured(data.config || {});
+    needsIntegration &&
+    !hasIntegrationConfigured(data.config || {}) &&
+    !isPendingIntegrationCheck;
 
   // Get model for AI nodes
   const getAiModel = (): string | null => {
