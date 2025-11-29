@@ -10,7 +10,7 @@
  * - Logical operators: &&, ||, !
  * - Grouping: ( )
  * - Literals: strings ('...', "..."), numbers, true, false, null, undefined
- * - Property access on variables: __v0.property (but not arbitrary property chains)
+ * - Property access on variables: __v0.property, __v0[0], __v0["key"]
  * - Array methods: .includes(), .length
  * - String methods: .startsWith(), .endsWith(), .includes()
  *
@@ -19,6 +19,7 @@
  * - Assignment operators (=, +=, -=, etc.)
  * - Code execution constructs (eval, Function, import, require)
  * - Property assignment
+ * - Array/object literals ([1,2,3], {key: value})
  * - Comments
  */
 
@@ -53,9 +54,8 @@ const DANGEROUS_PATTERNS = [
   /\breturn\s+/gi,
   // Template literals with expressions (could execute code)
   /`[^`]*\$\{/g,
-  // Object/Array literals with computed properties
-  /\[\s*[^\]]+\s*\]/g, // Will validate separately for array access vs array literals
-  /\{\s*\w+\s*:/g, // Object literals
+  // Object literals (but NOT bracket property access)
+  /\{\s*\w+\s*:/g,
   // Increment/decrement
   /\+\+|--/g,
   // Bitwise operators (rarely needed, often used in exploits)
@@ -80,6 +80,13 @@ const ALLOWED_METHODS = new Set([
 
 // Pattern to match method calls
 const METHOD_CALL_PATTERN = /\.(\w+)\s*\(/g;
+
+// Pattern to match bracket expressions: captures what's before and inside the brackets
+const BRACKET_EXPRESSION_PATTERN = /(\w+)\s*\[([^\]]+)\]/g;
+
+// Pattern for valid variable property access: __v0[0], __v0["key"], __v0['key']
+const VALID_BRACKET_ACCESS_PATTERN = /^__v\d+$/;
+const VALID_BRACKET_CONTENT_PATTERN = /^(\d+|'[^']*'|"[^"]*")$/;
 
 // Top-level regex patterns for token validation
 const WHITESPACE_SPLIT_PATTERN = /\s+/;
@@ -114,13 +121,70 @@ function checkDangerousPatterns(expression: string): ValidationResult {
 }
 
 /**
+ * Check bracket expressions to distinguish between:
+ * - Allowed: Variable property access like __v0[0], __v0["key"], __v0['key']
+ * - Blocked: Array literals like [1,2,3], or dangerous expressions like __v0[eval('x')]
+ */
+function checkBracketExpressions(expression: string): ValidationResult {
+  BRACKET_EXPRESSION_PATTERN.lastIndex = 0;
+
+  // Use exec loop for compatibility
+  let match: RegExpExecArray | null = null;
+  while (true) {
+    match = BRACKET_EXPRESSION_PATTERN.exec(expression);
+    if (match === null) {
+      break;
+    }
+
+    const beforeBracket = match[1];
+    const insideBracket = match[2].trim();
+
+    // Check if the part before the bracket is a valid variable (__v0, __v1, etc.)
+    if (!VALID_BRACKET_ACCESS_PATTERN.test(beforeBracket)) {
+      return {
+        valid: false,
+        error: `Bracket notation is only allowed on workflow variables. Found: "${beforeBracket}[...]"`,
+      };
+    }
+
+    // Check if the content inside brackets is safe (number or string literal)
+    if (!VALID_BRACKET_CONTENT_PATTERN.test(insideBracket)) {
+      return {
+        valid: false,
+        error: `Invalid bracket content: "[${insideBracket}]". Only numeric indices or string literals are allowed.`,
+      };
+    }
+  }
+
+  // Check for standalone array literals (brackets not preceded by a variable)
+  // This catches cases like "[1, 2, 3]" at the start of expression or after operators
+  const standaloneArrayPattern = /(?:^|[=!<>&|(\s])\s*\[/g;
+  standaloneArrayPattern.lastIndex = 0;
+  if (standaloneArrayPattern.test(expression)) {
+    return {
+      valid: false,
+      error:
+        "Array literals are not allowed in conditions. Use workflow variables instead.",
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
  * Check that all method calls use allowed methods
  */
 function checkMethodCalls(expression: string): ValidationResult {
   METHOD_CALL_PATTERN.lastIndex = 0;
-  const matches = expression.matchAll(METHOD_CALL_PATTERN);
 
-  for (const match of matches) {
+  // Use exec loop for compatibility
+  let match: RegExpExecArray | null = null;
+  while (true) {
+    match = METHOD_CALL_PATTERN.exec(expression);
+    if (match === null) {
+      break;
+    }
+
     const methodName = match[1];
     if (!ALLOWED_METHODS.has(methodName)) {
       return {
@@ -224,7 +288,13 @@ export function validateConditionExpression(
     return dangerousCheck;
   }
 
-  // Check method calls are whitelisted
+  // Check bracket expressions (array access vs array literals)
+  const bracketCheck = checkBracketExpressions(expression);
+  if (!bracketCheck.valid) {
+    return bracketCheck;
+  }
+
+  // Check method calls are allowed
   const methodCheck = checkMethodCalls(expression);
   if (!methodCheck.valid) {
     return methodCheck;
