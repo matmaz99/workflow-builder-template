@@ -22,6 +22,7 @@ const resendPlugin: IntegrationPlugin = {
       type: "password",
       placeholder: "re_...",
       configKey: "apiKey",
+      envVar: "RESEND_API_KEY",
       helpText: "Get your API key from ",
       helpLink: {
         text: "resend.com/api-keys",
@@ -34,20 +35,10 @@ const resendPlugin: IntegrationPlugin = {
       type: "text",
       placeholder: "noreply@yourdomain.com",
       configKey: "fromEmail",
+      envVar: "RESEND_FROM_EMAIL",
       helpText: "The email address that will appear as the sender",
     },
   ],
-
-  credentialMapping: (config) => {
-    const creds: Record<string, string> = {};
-    if (config.apiKey) {
-      creds.RESEND_API_KEY = String(config.apiKey);
-    }
-    if (config.fromEmail) {
-      creds.RESEND_FROM_EMAIL = String(config.fromEmail);
-    }
-    return creds;
-  },
 
   testConfig: {
     getTestFunction: async () => {
@@ -59,11 +50,6 @@ const resendPlugin: IntegrationPlugin = {
   dependencies: {
     resend: "^6.4.0",
   },
-
-  envVars: [
-    { name: "RESEND_API_KEY", description: "Resend API key for sending emails" },
-    { name: "RESEND_FROM_EMAIL", description: "Default sender email address" },
-  ],
 
   actions: [
     {

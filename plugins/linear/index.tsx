@@ -22,6 +22,7 @@ const linearPlugin: IntegrationPlugin = {
       type: "password",
       placeholder: "lin_api_...",
       configKey: "apiKey",
+      envVar: "LINEAR_API_KEY",
       helpText: "Get your API key from ",
       helpLink: {
         text: "linear.app",
@@ -34,20 +35,10 @@ const linearPlugin: IntegrationPlugin = {
       type: "text",
       placeholder: "Will use first team if not specified",
       configKey: "teamId",
+      envVar: "LINEAR_TEAM_ID",
       helpText: "The team ID to create issues in. Leave blank to use your first team.",
     },
   ],
-
-  credentialMapping: (config) => {
-    const creds: Record<string, string> = {};
-    if (config.apiKey) {
-      creds.LINEAR_API_KEY = String(config.apiKey);
-    }
-    if (config.teamId) {
-      creds.LINEAR_TEAM_ID = String(config.teamId);
-    }
-    return creds;
-  },
 
   testConfig: {
     getTestFunction: async () => {
@@ -59,11 +50,6 @@ const linearPlugin: IntegrationPlugin = {
   dependencies: {
     "@linear/sdk": "^63.2.0",
   },
-
-  envVars: [
-    { name: "LINEAR_API_KEY", description: "Linear API key" },
-    { name: "LINEAR_TEAM_ID", description: "Linear team ID (optional)" },
-  ],
 
   actions: [
     {

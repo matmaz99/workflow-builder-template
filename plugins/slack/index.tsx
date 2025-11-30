@@ -20,6 +20,7 @@ const slackPlugin: IntegrationPlugin = {
       type: "password",
       placeholder: "xoxb-...",
       configKey: "apiKey",
+      envVar: "SLACK_API_KEY",
       helpText: "Create a Slack app and get your Bot Token from ",
       helpLink: {
         text: "api.slack.com/apps",
@@ -27,14 +28,6 @@ const slackPlugin: IntegrationPlugin = {
       },
     },
   ],
-
-  credentialMapping: (config) => {
-    const creds: Record<string, string> = {};
-    if (config.apiKey) {
-      creds.SLACK_API_KEY = String(config.apiKey);
-    }
-    return creds;
-  },
 
   testConfig: {
     getTestFunction: async () => {
@@ -46,10 +39,6 @@ const slackPlugin: IntegrationPlugin = {
   dependencies: {
     "@slack/web-api": "^7.12.0",
   },
-
-  envVars: [
-    { name: "SLACK_API_KEY", description: "Slack Bot Token (xoxb-...)" },
-  ],
 
   actions: [
     {

@@ -24,6 +24,7 @@ const v0Plugin: IntegrationPlugin = {
       type: "password",
       placeholder: "v0_...",
       configKey: "apiKey",
+      envVar: "V0_API_KEY",
       helpText: "Get your API key from ",
       helpLink: {
         text: "v0.dev/chat/settings/keys",
@@ -31,14 +32,6 @@ const v0Plugin: IntegrationPlugin = {
       },
     },
   ],
-
-  credentialMapping: (config) => {
-    const creds: Record<string, string> = {};
-    if (config.apiKey) {
-      creds.V0_API_KEY = String(config.apiKey);
-    }
-    return creds;
-  },
 
   testConfig: {
     getTestFunction: async () => {
@@ -48,10 +41,6 @@ const v0Plugin: IntegrationPlugin = {
   },
 
   dependencies: {},
-
-  envVars: [
-    { name: "V0_API_KEY", description: "v0 API key" },
-  ],
 
   actions: [
     {

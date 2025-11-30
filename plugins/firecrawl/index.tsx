@@ -24,6 +24,7 @@ const firecrawlPlugin: IntegrationPlugin = {
       type: "password",
       placeholder: "fc-...",
       configKey: "firecrawlApiKey",
+      envVar: "FIRECRAWL_API_KEY",
       helpText: "Get your API key from ",
       helpLink: {
         text: "firecrawl.dev",
@@ -31,14 +32,6 @@ const firecrawlPlugin: IntegrationPlugin = {
       },
     },
   ],
-
-  credentialMapping: (config) => {
-    const creds: Record<string, string> = {};
-    if (config.firecrawlApiKey) {
-      creds.FIRECRAWL_API_KEY = String(config.firecrawlApiKey);
-    }
-    return creds;
-  },
 
   testConfig: {
     getTestFunction: async () => {
@@ -50,10 +43,6 @@ const firecrawlPlugin: IntegrationPlugin = {
   dependencies: {
     "@mendable/firecrawl-js": "^4.6.2",
   },
-
-  envVars: [
-    { name: "FIRECRAWL_API_KEY", description: "Firecrawl API key" },
-  ],
 
   actions: [
     {

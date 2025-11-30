@@ -64,12 +64,14 @@ export type IntegrationPlugin = {
     helpText?: string;
     helpLink?: { text: string; url: string };
     configKey: string; // Which key in IntegrationConfig to store the value
+    envVar?: string; // Environment variable this field maps to (e.g., "RESEND_API_KEY")
   }>;
 
-  // Credential mapping (how to map config to environment variables)
-  credentialMapping: (
-    config: Record<string, unknown>
-  ) => Record<string, string>;
+  // Additional environment variables not tied to form fields (e.g., alternative API keys)
+  extraEnvVars?: Array<{
+    name: string;
+    description: string;
+  }>;
 
   // Testing configuration (lazy-loaded to avoid bundling Node.js packages in client)
   testConfig?: {
@@ -84,12 +86,6 @@ export type IntegrationPlugin = {
 
   // NPM dependencies required by this plugin (package name -> version)
   dependencies?: Record<string, string>;
-
-  // Environment variables used by this plugin (for .env.example generation)
-  envVars?: Array<{
-    name: string;
-    description: string;
-  }>;
 
   // Actions provided by this integration
   actions: PluginAction[];
@@ -319,18 +315,60 @@ export function getDependenciesForActions(
 }
 
 /**
+ * Get environment variables for a single plugin (from formFields + extraEnvVars)
+ */
+export function getPluginEnvVars(
+  plugin: IntegrationPlugin
+): Array<{ name: string; description: string }> {
+  const envVars: Array<{ name: string; description: string }> = [];
+
+  // Get env vars from form fields
+  for (const field of plugin.formFields) {
+    if (field.envVar) {
+      envVars.push({
+        name: field.envVar,
+        description: field.helpText || field.label,
+      });
+    }
+  }
+
+  // Add extra env vars not tied to form fields
+  if (plugin.extraEnvVars) {
+    envVars.push(...plugin.extraEnvVars);
+  }
+
+  return envVars;
+}
+
+/**
  * Get all environment variables across all integrations
  */
 export function getAllEnvVars(): Array<{ name: string; description: string }> {
   const envVars: Array<{ name: string; description: string }> = [];
 
   for (const plugin of integrationRegistry.values()) {
-    if (plugin.envVars) {
-      envVars.push(...plugin.envVars);
-    }
+    envVars.push(...getPluginEnvVars(plugin));
   }
 
   return envVars;
+}
+
+/**
+ * Get credential mapping for a plugin (auto-generated from formFields)
+ */
+export function getCredentialMapping(
+  plugin: IntegrationPlugin,
+  config: Record<string, unknown>
+): Record<string, string> {
+  const creds: Record<string, string> = {};
+
+  for (const field of plugin.formFields) {
+    if (field.envVar && config[field.configKey]) {
+      creds[field.envVar] = String(config[field.configKey]);
+    }
+  }
+
+  return creds;
 }
 
 /**

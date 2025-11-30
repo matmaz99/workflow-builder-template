@@ -24,6 +24,7 @@ const aiGatewayPlugin: IntegrationPlugin = {
       type: "password",
       placeholder: "Your AI Gateway API key",
       configKey: "apiKey",
+      envVar: "AI_GATEWAY_API_KEY",
       helpText: "Get your API key from ",
       helpLink: {
         text: "vercel.com/ai-gateway",
@@ -32,17 +33,11 @@ const aiGatewayPlugin: IntegrationPlugin = {
     },
   ],
 
-  credentialMapping: (config) => {
-    const creds: Record<string, string> = {};
-    if (config.apiKey) {
-      creds.AI_GATEWAY_API_KEY = String(config.apiKey);
-    }
-    // Legacy support for openaiApiKey
-    if (config.openaiApiKey) {
-      creds.AI_GATEWAY_API_KEY = String(config.openaiApiKey);
-    }
-    return creds;
-  },
+  // Additional env vars for alternative API keys (not tied to form fields)
+  extraEnvVars: [
+    { name: "OPENAI_API_KEY", description: "OpenAI API key (alternative)" },
+    { name: "GOOGLE_AI_API_KEY", description: "Google AI API key (for Gemini)" },
+  ],
 
   testConfig: {
     getTestFunction: async () => {
@@ -57,12 +52,6 @@ const aiGatewayPlugin: IntegrationPlugin = {
     "@google/genai": "^1.28.0",
     zod: "^4.1.12",
   },
-
-  envVars: [
-    { name: "AI_GATEWAY_API_KEY", description: "AI Gateway API key" },
-    { name: "OPENAI_API_KEY", description: "OpenAI API key (alternative)" },
-    { name: "GOOGLE_AI_API_KEY", description: "Google AI API key (for Gemini)" },
-  ],
 
   actions: [
     {
