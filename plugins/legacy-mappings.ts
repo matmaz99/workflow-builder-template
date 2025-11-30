@@ -11,10 +11,7 @@
 export const LEGACY_ACTION_MAPPINGS: Record<string, string> = {
   // Firecrawl
   Scrape: "firecrawl/scrape",
-  "Scrape Website": "firecrawl/scrape",
-  "Scrape URL": "firecrawl/scrape",
   Search: "firecrawl/search",
-  "Search Web": "firecrawl/search",
 
   // AI Gateway
   "Generate Text": "ai-gateway/generate-text",
@@ -29,10 +26,9 @@ export const LEGACY_ACTION_MAPPINGS: Record<string, string> = {
 
   // Slack
   "Send Slack Message": "slack/send-slack-message",
-  "Send Message": "slack/send-slack-message",
 
   // v0
   "Create Chat": "v0/create-chat",
-  "Send Message to Chat": "v0/send-message",
+  "Send Message": "v0/send-message",
 };
 
