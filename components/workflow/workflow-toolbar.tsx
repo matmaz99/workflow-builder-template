@@ -517,21 +517,17 @@ function useWorkflowHandlers({
   userIntegrations,
 }: WorkflowHandlerParams) {
   const [showUnsavedRunDialog, setShowUnsavedRunDialog] = useState(false);
-  const [showMissingIntegrationsDialog, setShowMissingIntegrationsDialog] =
+  const [showWorkflowIssuesDialog, setShowWorkflowIssuesDialog] =
     useState(false);
-  const [missingIntegrations, setMissingIntegrations] = useState<
-    MissingIntegrationInfo[]
-  >([]);
-  const [showBrokenReferencesDialog, setShowBrokenReferencesDialog] =
-    useState(false);
-  const [brokenReferences, setBrokenReferences] = useState<
-    BrokenTemplateReferenceInfo[]
-  >([]);
-  const [showMissingRequiredFieldsDialog, setShowMissingRequiredFieldsDialog] =
-    useState(false);
-  const [missingRequiredFields, setMissingRequiredFields] = useState<
-    MissingRequiredFieldInfo[]
-  >([]);
+  const [workflowIssues, setWorkflowIssues] = useState<{
+    brokenReferences: BrokenTemplateReferenceInfo[];
+    missingRequiredFields: MissingRequiredFieldInfo[];
+    missingIntegrations: MissingIntegrationInfo[];
+  }>({
+    brokenReferences: [],
+    missingRequiredFields: [],
+    missingIntegrations: [],
+  });
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Cleanup polling interval on unmount
@@ -593,29 +589,26 @@ function useWorkflowHandlers({
       return;
     }
 
-    // Check for broken template references before executing
-    const broken = getBrokenTemplateReferences(nodes);
-    if (broken.length > 0) {
-      setBrokenReferences(broken);
-      setShowBrokenReferencesDialog(true);
-      return;
-    }
-
-    // Check for missing required fields before executing
+    // Collect all workflow issues at once
+    const brokenRefs = getBrokenTemplateReferences(nodes);
     const missingFields = getMissingRequiredFields(nodes);
-    if (missingFields.length > 0) {
-      setMissingRequiredFields(missingFields);
-      setShowMissingRequiredFieldsDialog(true);
+    const missingIntegrations = getMissingIntegrations(nodes, userIntegrations);
+
+    // If there are any issues, show the combined dialog
+    if (
+      brokenRefs.length > 0 ||
+      missingFields.length > 0 ||
+      missingIntegrations.length > 0
+    ) {
+      setWorkflowIssues({
+        brokenReferences: brokenRefs,
+        missingRequiredFields: missingFields,
+        missingIntegrations,
+      });
+      setShowWorkflowIssuesDialog(true);
       return;
     }
 
-    // Check for missing integrations before executing
-    const missing = getMissingIntegrations(nodes, userIntegrations);
-    if (missing.length > 0) {
-      setMissingIntegrations(missing);
-      setShowMissingIntegrationsDialog(true);
-      return;
-    }
     await executeWorkflow();
   };
 
@@ -625,24 +618,16 @@ function useWorkflowHandlers({
       return;
     }
 
-    setShowMissingIntegrationsDialog(false);
-    setShowBrokenReferencesDialog(false);
-    setShowMissingRequiredFieldsDialog(false);
+    setShowWorkflowIssuesDialog(false);
     await executeWorkflow();
   };
 
   return {
     showUnsavedRunDialog,
     setShowUnsavedRunDialog,
-    showMissingIntegrationsDialog,
-    setShowMissingIntegrationsDialog,
-    missingIntegrations,
-    showBrokenReferencesDialog,
-    setShowBrokenReferencesDialog,
-    brokenReferences,
-    showMissingRequiredFieldsDialog,
-    setShowMissingRequiredFieldsDialog,
-    missingRequiredFields,
+    showWorkflowIssuesDialog,
+    setShowWorkflowIssuesDialog,
+    workflowIssues,
     handleSave,
     handleExecute,
     handleExecuteAnyway,
@@ -796,15 +781,9 @@ function useWorkflowActions(state: ReturnType<typeof useWorkflowState>) {
   const {
     showUnsavedRunDialog,
     setShowUnsavedRunDialog,
-    showMissingIntegrationsDialog,
-    setShowMissingIntegrationsDialog,
-    missingIntegrations,
-    showBrokenReferencesDialog,
-    setShowBrokenReferencesDialog,
-    brokenReferences,
-    showMissingRequiredFieldsDialog,
-    setShowMissingRequiredFieldsDialog,
-    missingRequiredFields,
+    showWorkflowIssuesDialog,
+    setShowWorkflowIssuesDialog,
+    workflowIssues,
     handleSave,
     handleExecute,
     handleExecuteAnyway,
@@ -954,15 +933,9 @@ function useWorkflowActions(state: ReturnType<typeof useWorkflowState>) {
   return {
     showUnsavedRunDialog,
     setShowUnsavedRunDialog,
-    showMissingIntegrationsDialog,
-    setShowMissingIntegrationsDialog,
-    missingIntegrations,
-    showBrokenReferencesDialog,
-    setShowBrokenReferencesDialog,
-    brokenReferences,
-    showMissingRequiredFieldsDialog,
-    setShowMissingRequiredFieldsDialog,
-    missingRequiredFields,
+    showWorkflowIssuesDialog,
+    setShowWorkflowIssuesDialog,
+    workflowIssues,
     handleSave,
     handleExecute,
     handleExecuteAnyway,
@@ -1382,45 +1355,148 @@ function WorkflowMenuComponent({
   );
 }
 
-// Missing Integrations Dialog Component
-function MissingIntegrationsDialog({
+// Combined Workflow Issues Dialog Component
+function WorkflowIssuesDialog({
+  state,
   actions,
 }: {
+  state: ReturnType<typeof useWorkflowState>;
   actions: ReturnType<typeof useWorkflowActions>;
 }) {
   const [showIntegrationsDialog, setShowIntegrationsDialog] = useState(false);
+  const { brokenReferences, missingRequiredFields, missingIntegrations } =
+    actions.workflowIssues;
+
+  const handleGoToStep = (nodeId: string) => {
+    actions.setShowWorkflowIssuesDialog(false);
+    state.setSelectedNodeId(nodeId);
+    state.setActiveTab("properties");
+  };
 
   const handleAddIntegrations = () => {
-    actions.setShowMissingIntegrationsDialog(false);
+    actions.setShowWorkflowIssuesDialog(false);
     setShowIntegrationsDialog(true);
   };
+
+  const totalIssues =
+    brokenReferences.length +
+    missingRequiredFields.length +
+    missingIntegrations.length;
 
   return (
     <>
       <AlertDialog
-        onOpenChange={actions.setShowMissingIntegrationsDialog}
-        open={actions.showMissingIntegrationsDialog}
+        onOpenChange={actions.setShowWorkflowIssuesDialog}
+        open={actions.showWorkflowIssuesDialog}
       >
-        <AlertDialogContent className="max-w-lg">
+        <AlertDialogContent className="flex max-h-[80vh] max-w-lg flex-col overflow-hidden">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="size-5 text-orange-500" />
-              Missing Integrations
+              Workflow Issues ({totalIssues})
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-3">
-                <p>
-                  This workflow has steps that require integrations which are
-                  not configured. The workflow will likely fail without them.
-                </p>
+              <div className="text-muted-foreground text-sm">
+                This workflow has issues that may cause it to fail. Click on an
+                item to fix it.
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="flex-1 space-y-4 overflow-y-auto py-2">
+            {/* Broken References Section */}
+            {brokenReferences.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="flex items-center gap-1.5 font-medium text-red-600 text-sm dark:text-red-400">
+                  <AlertTriangle className="size-4" />
+                  Broken References ({brokenReferences.length})
+                </h4>
                 <div className="space-y-2">
-                  {actions.missingIntegrations.map((missing) => (
+                  {brokenReferences.map((broken) => (
+                    <button
+                      className="flex w-full items-start gap-3 rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-left transition-colors hover:bg-red-500/10"
+                      key={broken.nodeId}
+                      onClick={() => handleGoToStep(broken.nodeId)}
+                      type="button"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-foreground text-sm">
+                          {broken.nodeLabel}
+                        </p>
+                        <div className="mt-1 space-y-1">
+                          {broken.brokenReferences.map((ref, idx) => (
+                            <p
+                              className="text-muted-foreground text-xs"
+                              key={`${ref.fieldKey}-${idx}`}
+                            >
+                              <span className="font-mono text-red-600 dark:text-red-400">
+                                {ref.displayText}
+                              </span>{" "}
+                              in {ref.fieldLabel}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Missing Required Fields Section */}
+            {missingRequiredFields.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="flex items-center gap-1.5 font-medium text-orange-600 text-sm dark:text-orange-400">
+                  <AlertTriangle className="size-4" />
+                  Missing Required Fields ({missingRequiredFields.length})
+                </h4>
+                <div className="space-y-2">
+                  {missingRequiredFields.map((node) => (
+                    <button
+                      className="flex w-full items-start gap-3 rounded-lg border border-orange-500/20 bg-orange-500/5 p-3 text-left transition-colors hover:bg-orange-500/10"
+                      key={node.nodeId}
+                      onClick={() => handleGoToStep(node.nodeId)}
+                      type="button"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-foreground text-sm">
+                          {node.nodeLabel}
+                        </p>
+                        <div className="mt-1 space-y-1">
+                          {node.missingFields.map((field) => (
+                            <p
+                              className="text-muted-foreground text-xs"
+                              key={field.fieldKey}
+                            >
+                              Missing:{" "}
+                              <span className="font-medium text-orange-600 dark:text-orange-400">
+                                {field.fieldLabel}
+                              </span>
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Missing Integrations Section */}
+            {missingIntegrations.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="flex items-center gap-1.5 font-medium text-orange-600 text-sm dark:text-orange-400">
+                  <AlertTriangle className="size-4" />
+                  Missing Integrations ({missingIntegrations.length})
+                </h4>
+                <div className="space-y-2">
+                  {missingIntegrations.map((missing) => (
                     <div
-                      className="flex items-start gap-3 rounded-lg border bg-muted/50 p-3"
+                      className="flex items-center gap-3 rounded-lg border border-orange-500/20 bg-orange-500/5 p-3"
                       key={missing.integrationType}
                     >
                       <IntegrationIcon
-                        className="mt-0.5 size-5 shrink-0"
+                        className="size-5 shrink-0"
                         integration={missing.integrationType}
                       />
                       <div className="min-w-0 flex-1">
@@ -1434,18 +1510,26 @@ function MissingIntegrationsDialog({
                             : missing.nodeNames.join(", ")}
                         </p>
                       </div>
+                      <Button
+                        className="shrink-0"
+                        onClick={handleAddIntegrations}
+                        size="sm"
+                        variant="outline"
+                      >
+                        Add
+                      </Button>
                     </div>
                   ))}
                 </div>
               </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+            )}
+          </div>
+
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <Button onClick={actions.handleExecuteAnyway} variant="outline">
               Run Anyway
             </Button>
-            <Button onClick={handleAddIntegrations}>Add Integrations</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1455,157 +1539,6 @@ function MissingIntegrationsDialog({
         open={showIntegrationsDialog}
       />
     </>
-  );
-}
-
-// Broken References Dialog Component
-function BrokenReferencesDialog({
-  state,
-  actions,
-}: {
-  state: ReturnType<typeof useWorkflowState>;
-  actions: ReturnType<typeof useWorkflowActions>;
-}) {
-  const handleGoToStep = (nodeId: string) => {
-    actions.setShowBrokenReferencesDialog(false);
-    state.setSelectedNodeId(nodeId);
-    state.setActiveTab("properties");
-  };
-
-  return (
-    <AlertDialog
-      onOpenChange={actions.setShowBrokenReferencesDialog}
-      open={actions.showBrokenReferencesDialog}
-    >
-      <AlertDialogContent className="max-w-lg">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="size-5 text-red-500" />
-            Broken References
-          </AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-3">
-              <p>
-                This workflow has steps that reference nodes which no longer
-                exist. The workflow will likely fail without fixing these
-                references.
-              </p>
-              <div className="space-y-2">
-                {actions.brokenReferences.map((broken) => (
-                  <button
-                    className="flex w-full items-start gap-3 rounded-lg border bg-muted/50 p-3 text-left transition-colors hover:bg-muted"
-                    key={broken.nodeId}
-                    onClick={() => handleGoToStep(broken.nodeId)}
-                    type="button"
-                  >
-                    <AlertTriangle className="mt-0.5 size-5 shrink-0 text-red-500" />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-foreground text-sm">
-                        {broken.nodeLabel}
-                      </p>
-                      <div className="mt-1 space-y-1">
-                        {broken.brokenReferences.map((ref, idx) => (
-                          <p
-                            className="text-muted-foreground text-xs"
-                            key={`${ref.fieldKey}-${idx}`}
-                          >
-                            <span className="font-mono text-red-600 dark:text-red-400">
-                              {ref.displayText}
-                            </span>{" "}
-                            in {ref.fieldLabel}
-                          </p>
-                        ))}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <Button onClick={actions.handleExecuteAnyway} variant="outline">
-            Run Anyway
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
-
-// Missing Required Fields Dialog Component
-function MissingRequiredFieldsDialog({
-  state,
-  actions,
-}: {
-  state: ReturnType<typeof useWorkflowState>;
-  actions: ReturnType<typeof useWorkflowActions>;
-}) {
-  const handleGoToStep = (nodeId: string) => {
-    actions.setShowMissingRequiredFieldsDialog(false);
-    state.setSelectedNodeId(nodeId);
-    state.setActiveTab("properties");
-  };
-
-  return (
-    <AlertDialog
-      onOpenChange={actions.setShowMissingRequiredFieldsDialog}
-      open={actions.showMissingRequiredFieldsDialog}
-    >
-      <AlertDialogContent className="max-w-lg">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="size-5 text-orange-500" />
-            Missing Required Fields
-          </AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-3">
-              <p>
-                This workflow has steps with required fields that are not filled
-                in. The workflow will likely fail without them.
-              </p>
-              <div className="space-y-2">
-                {actions.missingRequiredFields.map((node) => (
-                  <button
-                    className="flex w-full items-start gap-3 rounded-lg border bg-muted/50 p-3 text-left transition-colors hover:bg-muted"
-                    key={node.nodeId}
-                    onClick={() => handleGoToStep(node.nodeId)}
-                    type="button"
-                  >
-                    <AlertTriangle className="mt-0.5 size-5 shrink-0 text-orange-500" />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-foreground text-sm">
-                        {node.nodeLabel}
-                      </p>
-                      <div className="mt-1 space-y-1">
-                        {node.missingFields.map((field) => (
-                          <p
-                            className="text-muted-foreground text-xs"
-                            key={field.fieldKey}
-                          >
-                            Missing:{" "}
-                            <span className="font-medium text-orange-600 dark:text-orange-400">
-                              {field.fieldLabel}
-                            </span>
-                          </p>
-                        ))}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <Button onClick={actions.handleExecuteAnyway} variant="outline">
-            Run Anyway
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   );
 }
 
@@ -1841,9 +1774,7 @@ function WorkflowDialogsComponent({
         </DialogContent>
       </Dialog>
 
-      <MissingIntegrationsDialog actions={actions} />
-      <BrokenReferencesDialog actions={actions} state={state} />
-      <MissingRequiredFieldsDialog actions={actions} state={state} />
+      <WorkflowIssuesDialog actions={actions} state={state} />
     </>
   );
 }
