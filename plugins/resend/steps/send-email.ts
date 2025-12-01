@@ -30,7 +30,7 @@ export type SendEmailInput = StepInput &
 /**
  * Core logic - portable between app and export
  */
-async function sendEmailCore(
+export async function stepHandler(
   input: SendEmailCoreInput,
   credentials: ResendCredentials
 ): Promise<SendEmailResult> {
@@ -107,9 +107,8 @@ export async function sendEmailStep(
     idempotencyKey: input._context?.executionId,
   };
 
-  return withStepLogging(input, () => sendEmailCore(coreInput, credentials));
+  return withStepLogging(input, () => stepHandler(coreInput, credentials));
 }
 
-// Export markers for codegen auto-generation
+// Export marker for codegen auto-generation
 export const _integrationType = "resend";
-export const _exportCore = sendEmailCore;
