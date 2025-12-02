@@ -157,10 +157,7 @@ export async function PATCH(
       );
       if (!validation.valid) {
         return NextResponse.json(
-          {
-            error: "Invalid integration references in workflow",
-            invalidIds: validation.invalidIds,
-          },
+          { error: "Invalid integration references in workflow" },
           { status: 403 }
         );
       }
