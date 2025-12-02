@@ -56,6 +56,9 @@ export const verifications = pgTable("verifications", {
   updatedAt: timestamp("updated_at"),
 });
 
+// Workflow visibility type
+export type WorkflowVisibility = "private" | "public";
+
 // Workflows table with user association
 export const workflows = pgTable("workflows", {
   id: text("id")
@@ -70,6 +73,10 @@ export const workflows = pgTable("workflows", {
   nodes: jsonb("nodes").notNull().$type<any[]>(),
   // biome-ignore lint/suspicious/noExplicitAny: JSONB type - structure validated at application level
   edges: jsonb("edges").notNull().$type<any[]>(),
+  visibility: text("visibility")
+    .notNull()
+    .default("private")
+    .$type<WorkflowVisibility>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
