@@ -146,6 +146,21 @@ export const workflowExecutionLogs = pgTable("workflow_execution_logs", {
   timestamp: timestamp("timestamp").notNull().defaultNow(),
 });
 
+// API Keys table for webhook authentication
+export const apiKeys = pgTable("api_keys", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => generateId()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
+  name: text("name"), // Optional label for the API key
+  keyHash: text("key_hash").notNull(), // Store hashed version of the key
+  keyPrefix: text("key_prefix").notNull(), // Store first few chars for display (e.g., "wf_abc...")
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at"),
+});
+
 // Relations
 export const workflowExecutionsRelations = relations(
   workflowExecutions,
@@ -167,3 +182,5 @@ export type WorkflowExecution = typeof workflowExecutions.$inferSelect;
 export type NewWorkflowExecution = typeof workflowExecutions.$inferInsert;
 export type WorkflowExecutionLog = typeof workflowExecutionLogs.$inferSelect;
 export type NewWorkflowExecutionLog = typeof workflowExecutionLogs.$inferInsert;
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;
