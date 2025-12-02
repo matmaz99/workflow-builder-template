@@ -40,6 +40,11 @@ const blobPlugin: IntegrationPlugin = {
       category: "Blob",
       stepFunction: "putBlobStep",
       stepImportPath: "put",
+      outputFields: [
+        { field: "url", description: "Public URL of the blob" },
+        { field: "downloadUrl", description: "Direct download URL" },
+        { field: "pathname", description: "Path where blob was stored" },
+      ],
       configFields: [
         {
           key: "pathname",
@@ -100,6 +105,11 @@ const blobPlugin: IntegrationPlugin = {
       category: "Blob",
       stepFunction: "listBlobsStep",
       stepImportPath: "list",
+      outputFields: [
+        { field: "blobs", description: "Array of blob objects" },
+        { field: "hasMore", description: "Whether more results exist" },
+        { field: "cursor", description: "Pagination cursor" },
+      ],
       configFields: [
         {
           key: "prefix",

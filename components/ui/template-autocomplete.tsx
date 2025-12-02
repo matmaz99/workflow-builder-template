@@ -111,6 +111,15 @@ const isActionType = (
 const getCommonFields = (node: WorkflowNode) => {
   const actionType = node.data.config?.actionType as string | undefined;
 
+  // First, check if the plugin defines output fields
+  if (actionType) {
+    const action = findActionById(actionType);
+    if (action?.outputFields && action.outputFields.length > 0) {
+      return action.outputFields;
+    }
+  }
+
+  // Legacy hardcoded fields for backwards compatibility
   if (isActionType(actionType, "Find Issues", "linear/find-issues")) {
     return [
       { field: "issues", description: "Array of issues found" },
