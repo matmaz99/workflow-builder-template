@@ -57,7 +57,7 @@ export const PLUGIN_STEP_IMPORTERS: Record<string, StepImporter> = {
     importer: () => import("@/plugins/firecrawl/steps/scrape"),
     stepFunction: "firecrawlScrapeStep",
   },
-  "Scrape": {
+  Scrape: {
     importer: () => import("@/plugins/firecrawl/steps/scrape"),
     stepFunction: "firecrawlScrapeStep",
   },
@@ -65,7 +65,7 @@ export const PLUGIN_STEP_IMPORTERS: Record<string, StepImporter> = {
     importer: () => import("@/plugins/firecrawl/steps/search"),
     stepFunction: "firecrawlSearchStep",
   },
-  "Search": {
+  Search: {
     importer: () => import("@/plugins/firecrawl/steps/search"),
     stepFunction: "firecrawlSearchStep",
   },
@@ -146,8 +146,8 @@ export const ACTION_LABELS: Record<string, string> = {
   "superagent/redact": "Redact",
   "v0/create-chat": "Create Chat",
   "v0/send-message": "Send Message",
-  "Scrape": "Scrape URL",
-  "Search": "Search Web",
+  Scrape: "Scrape URL",
+  Search: "Search Web",
   "Generate Text": "Generate Text",
   "Generate Image": "Generate Image",
   "Send Email": "Send Email",
