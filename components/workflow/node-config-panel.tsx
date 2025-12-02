@@ -183,7 +183,9 @@ export const PanelInner = () => {
 
   // Switch to Properties tab if Code tab is hidden for the selected node
   useEffect(() => {
-    if (!selectedNode || activeTab !== "code") return;
+    if (!selectedNode || activeTab !== "code") {
+      return;
+    }
 
     const isConditionAction =
       selectedNode.data.config?.actionType === "Condition";
