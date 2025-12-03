@@ -904,14 +904,6 @@ export function generateWorkflowCode(
   }
 
   /**
-   * Check if a node is a condition action
-   */
-  function isConditionNode(nodeId: string): boolean {
-    const node = nodeMap.get(nodeId);
-    return node?.data.config?.actionType === "Condition";
-  }
-
-  /**
    * Generate code for a complete branch (node + all descendants)
    * Used inside async IIFEs for parallel branches
    */
@@ -1064,6 +1056,34 @@ export function generateWorkflowCode(
   }
 
   /**
+   * Generate a single async IIFE branch for Promise.all
+   */
+  function generateAsyncIIFEBranch(
+    nodeId: string,
+    indent: string,
+    isLast: boolean
+  ): string[] {
+    const branchVisited = new Set(visited);
+    branchVisited.delete(nodeId);
+    const branchCode = generateBranchCode(
+      nodeId,
+      `${indent}    `,
+      branchVisited
+    );
+    const comma = isLast ? "" : ",";
+
+    if (branchCode.length === 0) {
+      return [];
+    }
+
+    return [
+      `${indent}  (async () => {`,
+      ...branchCode,
+      `${indent}  })()${comma}`,
+    ];
+  }
+
+  /**
    * Generate code for multiple nodes from trigger
    */
   function generateParallelNodeCode(
@@ -1094,30 +1114,17 @@ export function generateWorkflowCode(
 
     // Multiple branches - wrap each in async IIFE
     const lines: string[] = [`${indent}await Promise.all([`];
-
     for (let i = 0; i < unvisited.length; i++) {
-      const nodeId = unvisited[i];
-      const isLast = i === unvisited.length - 1;
-      const comma = isLast ? "" : ",";
-
-      // Create branch visited set WITHOUT the current node so it gets processed
-      const branchVisited = new Set(visited);
-      branchVisited.delete(nodeId);
-
-      const branchCode = generateBranchCode(
-        nodeId,
-        `${indent}    `,
-        branchVisited
+      lines.push(
+        ...generateAsyncIIFEBranch(
+          unvisited[i],
+          indent,
+          i === unvisited.length - 1
+        )
       );
-
-      if (branchCode.length > 0) {
-        lines.push(`${indent}  (async () => {`);
-        lines.push(...branchCode);
-        lines.push(`${indent}  })()${comma}`);
-      }
     }
-
     lines.push(`${indent}]);`);
+
     return lines;
   }
 
