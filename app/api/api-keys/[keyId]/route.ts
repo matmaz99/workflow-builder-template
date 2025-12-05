@@ -1,8 +1,5 @@
-import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { apiKeys } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
 
 // DELETE - Delete an API key
 export async function DELETE(
@@ -11,21 +8,26 @@ export async function DELETE(
 ) {
   try {
     const { keyId } = await context.params;
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Delete the key (only if it belongs to the user)
-    const result = await db
-      .delete(apiKeys)
-      .where(and(eq(apiKeys.id, keyId), eq(apiKeys.userId, session.user.id)))
-      .returning({ id: apiKeys.id });
+    const { data, error } = await supabase
+      .from("api_keys")
+      .delete()
+      .eq("id", keyId)
+      .eq("user_id", user.id)
+      .select("id");
 
-    if (result.length === 0) {
+    if (error) {
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
       return NextResponse.json({ error: "API key not found" }, { status: 404 });
     }
 

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
-import { authClient, useSession } from "@/lib/auth-client";
+import { useSession } from "@/lib/auth-client-supabase";
 import {
   currentWorkflowNameAtom,
   edgesAtom,
@@ -57,13 +57,8 @@ const Home = () => {
     document.title = `${currentWorkflowName} - AI Workflow Builder`;
   }, [currentWorkflowName]);
 
-  // Helper to create anonymous session if needed
-  const ensureSession = useCallback(async () => {
-    if (!session) {
-      await authClient.signIn.anonymous();
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }, [session]);
+  // Check if user is authenticated
+  const isAuthenticated = !!session;
 
   // Handler to add the first node (replaces the "add" node)
   const handleAddNode = useCallback(() => {
@@ -102,11 +97,16 @@ const Home = () => {
       if (realNodes.length === 0 || hasCreatedWorkflowRef.current) {
         return;
       }
+
+      // Require authentication to create workflows
+      if (!isAuthenticated) {
+        toast.error("Please sign in to create workflows");
+        return;
+      }
+
       hasCreatedWorkflowRef.current = true;
 
       try {
-        await ensureSession();
-
         // Create workflow with all real nodes
         const newWorkflow = await api.workflow.create({
           name: "Untitled Workflow",
@@ -129,7 +129,7 @@ const Home = () => {
     };
 
     createWorkflowAndRedirect();
-  }, [nodes, edges, router, ensureSession, setIsTransitioningFromHomepage]);
+  }, [nodes, edges, router, isAuthenticated, setIsTransitioningFromHomepage]);
 
   // Canvas and toolbar are rendered by PersistentCanvas in the layout
   return null;

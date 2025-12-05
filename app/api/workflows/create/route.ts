@@ -1,10 +1,7 @@
-import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { validateWorkflowIntegrations } from "@/lib/db/integrations";
-import { workflows } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
+import { validateWorkflowIntegrations } from "@/lib/integrations-supabase";
 import { generateId } from "@/lib/utils/id";
 
 // Helper function to create a default trigger node
@@ -25,11 +22,10 @@ function createDefaultTriggerNode() {
 
 export async function POST(request: Request) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -45,7 +41,7 @@ export async function POST(request: Request) {
     // Validate that all integrationIds in nodes belong to the current user
     const validation = await validateWorkflowIntegrations(
       body.nodes,
-      session.user.id
+      user.id
     );
     if (!validation.valid) {
       return NextResponse.json(
@@ -63,32 +59,38 @@ export async function POST(request: Request) {
     // Generate "Untitled N" name if the provided name is "Untitled Workflow"
     let workflowName = body.name;
     if (body.name === "Untitled Workflow") {
-      const userWorkflows = await db.query.workflows.findMany({
-        where: eq(workflows.userId, session.user.id),
-      });
-      const count = userWorkflows.length + 1;
+      const { data: userWorkflows } = await supabase
+        .from("workflows")
+        .select("id")
+        .eq("user_id", user.id);
+      const count = (userWorkflows?.length ?? 0) + 1;
       workflowName = `Untitled ${count}`;
     }
 
     // Generate workflow ID first
     const workflowId = generateId();
 
-    const [newWorkflow] = await db
-      .insert(workflows)
-      .values({
+    const { data: newWorkflow, error } = await supabase
+      .from("workflows")
+      .insert({
         id: workflowId,
         name: workflowName,
         description: body.description,
         nodes,
         edges: body.edges,
-        userId: session.user.id,
+        user_id: user.id,
       })
-      .returning();
+      .select()
+      .single();
+
+    if (error || !newWorkflow) {
+      throw new Error(error?.message || "Failed to create workflow");
+    }
 
     return NextResponse.json({
       ...newWorkflow,
-      createdAt: newWorkflow.createdAt.toISOString(),
-      updatedAt: newWorkflow.updatedAt.toISOString(),
+      createdAt: newWorkflow.created_at,
+      updatedAt: newWorkflow.updated_at,
     });
   } catch (error) {
     console.error("Failed to create workflow:", error);

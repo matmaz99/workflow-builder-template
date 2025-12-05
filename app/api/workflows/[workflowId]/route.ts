@@ -1,9 +1,6 @@
-import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { validateWorkflowIntegrations } from "@/lib/db/integrations";
-import { workflows } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
+import { validateWorkflowIntegrations } from "@/lib/integrations-supabase";
 
 // Helper to strip sensitive data from nodes for public viewing
 function sanitizeNodesForPublicView(
@@ -39,23 +36,24 @@ export async function GET(
 ) {
   try {
     const { workflowId } = await context.params;
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
     // First, try to find the workflow
-    const workflow = await db.query.workflows.findFirst({
-      where: eq(workflows.id, workflowId),
-    });
+    const { data: workflow, error } = await supabase
+      .from("workflows")
+      .select("*")
+      .eq("id", workflowId)
+      .single();
 
-    if (!workflow) {
+    if (error || !workflow) {
       return NextResponse.json(
         { error: "Workflow not found" },
         { status: 404 }
       );
     }
 
-    const isOwner = session?.user?.id === workflow.userId;
+    const isOwner = user?.id === workflow.user_id;
 
     // If not owner, check if workflow is public
     if (!isOwner && workflow.visibility !== "public") {
@@ -73,8 +71,8 @@ export async function GET(
         : sanitizeNodesForPublicView(
             workflow.nodes as Record<string, unknown>[]
           ),
-      createdAt: workflow.createdAt.toISOString(),
-      updatedAt: workflow.updatedAt.toISOString(),
+      createdAt: workflow.created_at,
+      updatedAt: workflow.updated_at,
       isOwner,
     };
 
@@ -96,7 +94,7 @@ function buildUpdateData(
   body: Record<string, unknown>
 ): Record<string, unknown> {
   const updateData: Record<string, unknown> = {
-    updatedAt: new Date(),
+    updated_at: new Date().toISOString(),
   };
 
   if (body.name !== undefined) {
@@ -124,23 +122,22 @@ export async function PATCH(
 ) {
   try {
     const { workflowId } = await context.params;
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Verify ownership
-    const existingWorkflow = await db.query.workflows.findFirst({
-      where: and(
-        eq(workflows.id, workflowId),
-        eq(workflows.userId, session.user.id)
-      ),
-    });
+    const { data: existingWorkflow, error: fetchError } = await supabase
+      .from("workflows")
+      .select("*")
+      .eq("id", workflowId)
+      .eq("user_id", user.id)
+      .single();
 
-    if (!existingWorkflow) {
+    if (fetchError || !existingWorkflow) {
       return NextResponse.json(
         { error: "Workflow not found" },
         { status: 404 }
@@ -153,7 +150,7 @@ export async function PATCH(
     if (Array.isArray(body.nodes)) {
       const validation = await validateWorkflowIntegrations(
         body.nodes,
-        session.user.id
+        user.id
       );
       if (!validation.valid) {
         return NextResponse.json(
@@ -177,13 +174,14 @@ export async function PATCH(
 
     const updateData = buildUpdateData(body);
 
-    const [updatedWorkflow] = await db
-      .update(workflows)
-      .set(updateData)
-      .where(eq(workflows.id, workflowId))
-      .returning();
+    const { data: updatedWorkflow, error } = await supabase
+      .from("workflows")
+      .update(updateData)
+      .eq("id", workflowId)
+      .select()
+      .single();
 
-    if (!updatedWorkflow) {
+    if (error || !updatedWorkflow) {
       return NextResponse.json(
         { error: "Workflow not found" },
         { status: 404 }
@@ -192,8 +190,8 @@ export async function PATCH(
 
     return NextResponse.json({
       ...updatedWorkflow,
-      createdAt: updatedWorkflow.createdAt.toISOString(),
-      updatedAt: updatedWorkflow.updatedAt.toISOString(),
+      createdAt: updatedWorkflow.created_at,
+      updatedAt: updatedWorkflow.updated_at,
       isOwner: true,
     });
   } catch (error) {
@@ -214,30 +212,36 @@ export async function DELETE(
 ) {
   try {
     const { workflowId } = await context.params;
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Verify ownership
-    const existingWorkflow = await db.query.workflows.findFirst({
-      where: and(
-        eq(workflows.id, workflowId),
-        eq(workflows.userId, session.user.id)
-      ),
-    });
+    const { data: existingWorkflow, error: fetchError } = await supabase
+      .from("workflows")
+      .select("*")
+      .eq("id", workflowId)
+      .eq("user_id", user.id)
+      .single();
 
-    if (!existingWorkflow) {
+    if (fetchError || !existingWorkflow) {
       return NextResponse.json(
         { error: "Workflow not found" },
         { status: 404 }
       );
     }
 
-    await db.delete(workflows).where(eq(workflows.id, workflowId));
+    const { error } = await supabase
+      .from("workflows")
+      .delete()
+      .eq("id", workflowId);
+
+    if (error) {
+      throw error;
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

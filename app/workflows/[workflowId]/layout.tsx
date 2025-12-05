@@ -1,8 +1,6 @@
-import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { db } from "@/lib/db";
-import { workflows } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
 
 type WorkflowLayoutProps = {
   children: ReactNode;
@@ -19,13 +17,13 @@ export async function generateMetadata({
   let isPublic = false;
 
   try {
-    const workflow = await db.query.workflows.findFirst({
-      where: eq(workflows.id, workflowId),
-      columns: {
-        name: true,
-        visibility: true,
-      },
-    });
+    const supabase = await createClient();
+
+    const { data: workflow } = await supabase
+      .from("workflows")
+      .select("name, visibility")
+      .eq("id", workflowId)
+      .single();
 
     if (workflow) {
       isPublic = workflow.visibility === "public";

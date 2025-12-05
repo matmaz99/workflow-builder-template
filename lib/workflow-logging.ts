@@ -1,12 +1,13 @@
 /**
  * Server-only workflow logging functions
  * These replace the HTTP endpoint for better security
+ *
+ * Uses admin client because these functions run in background workflow
+ * execution context where cookies are not available.
  */
 import "server-only";
 
-import { eq } from "drizzle-orm";
-import { db } from "@/lib/db";
-import { workflowExecutionLogs, workflowExecutions } from "@/lib/db/schema";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type LogStepStartParams = {
   executionId: string;
@@ -27,18 +28,23 @@ export type LogStepStartResult = {
 export async function logStepStartDb(
   params: LogStepStartParams
 ): Promise<LogStepStartResult> {
-  const [log] = await db
-    .insert(workflowExecutionLogs)
-    .values({
-      executionId: params.executionId,
-      nodeId: params.nodeId,
-      nodeName: params.nodeName,
-      nodeType: params.nodeType,
+  const supabase = createAdminClient();
+
+  const { data: log, error } = await supabase
+    .from("workflow_execution_logs")
+    .insert({
+      execution_id: params.executionId,
+      node_id: params.nodeId,
+      node_name: params.nodeName,
+      node_type: params.nodeType,
       status: "running",
       input: params.input,
-      startedAt: new Date(),
+      started_at: new Date().toISOString(),
     })
-    .returning();
+    .select()
+    .single();
+
+  if (error) throw error;
 
   return {
     logId: log.id,
@@ -60,18 +66,21 @@ export type LogStepCompleteParams = {
 export async function logStepCompleteDb(
   params: LogStepCompleteParams
 ): Promise<void> {
+  const supabase = createAdminClient();
   const duration = Date.now() - params.startTime;
 
-  await db
-    .update(workflowExecutionLogs)
-    .set({
+  const { error } = await supabase
+    .from("workflow_execution_logs")
+    .update({
       status: params.status,
       output: params.output,
       error: params.error,
-      completedAt: new Date(),
+      completed_at: new Date().toISOString(),
       duration: duration.toString(),
     })
-    .where(eq(workflowExecutionLogs.id, params.logId));
+    .eq("id", params.logId);
+
+  if (error) throw error;
 }
 
 export type LogWorkflowCompleteParams = {
@@ -88,16 +97,19 @@ export type LogWorkflowCompleteParams = {
 export async function logWorkflowCompleteDb(
   params: LogWorkflowCompleteParams
 ): Promise<void> {
+  const supabase = createAdminClient();
   const duration = Date.now() - params.startTime;
 
-  await db
-    .update(workflowExecutions)
-    .set({
+  const { error } = await supabase
+    .from("workflow_executions")
+    .update({
       status: params.status,
       output: params.output,
       error: params.error,
-      completedAt: new Date(),
+      completed_at: new Date().toISOString(),
       duration: duration.toString(),
     })
-    .where(eq(workflowExecutions.id, params.executionId));
+    .eq("id", params.executionId);
+
+  if (error) throw error;
 }

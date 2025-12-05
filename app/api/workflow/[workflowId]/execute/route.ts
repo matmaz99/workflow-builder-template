@@ -1,10 +1,7 @@
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { start } from "workflow/api";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { validateWorkflowIntegrations } from "@/lib/db/integrations";
-import { workflowExecutions, workflows } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
+import { validateWorkflowIntegrations } from "@/lib/integrations-supabase";
 import { executeWorkflow } from "@/lib/workflow-executor.workflow";
 import type { WorkflowEdge, WorkflowNode } from "@/lib/workflow-store";
 
@@ -49,14 +46,15 @@ async function executeWorkflowBackground(
     );
 
     // Update execution record with error
-    await db
-      .update(workflowExecutions)
-      .set({
+    const supabase = await createClient();
+    await supabase
+      .from("workflow_executions")
+      .update({
         status: "error",
         error: error instanceof Error ? error.message : "Unknown error",
-        completedAt: new Date(),
+        completed_at: new Date().toISOString(),
       })
-      .where(eq(workflowExecutions.id, executionId));
+      .eq("id", executionId);
   }
 }
 
@@ -68,34 +66,35 @@ export async function POST(
     const { workflowId } = await context.params;
 
     // Get session
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Get workflow and verify ownership
-    const workflow = await db.query.workflows.findFirst({
-      where: eq(workflows.id, workflowId),
-    });
+    const { data: workflow, error: workflowError } = await supabase
+      .from("workflows")
+      .select("*")
+      .eq("id", workflowId)
+      .single();
 
-    if (!workflow) {
+    if (workflowError || !workflow) {
       return NextResponse.json(
         { error: "Workflow not found" },
         { status: 404 }
       );
     }
 
-    if (workflow.userId !== session.user.id) {
+    if (workflow.user_id !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Validate that all integrationIds in workflow nodes belong to the current user
     const validation = await validateWorkflowIntegrations(
       workflow.nodes as WorkflowNode[],
-      session.user.id
+      user.id
     );
     if (!validation.valid) {
       console.error(
@@ -113,15 +112,20 @@ export async function POST(
     const input = body.input || {};
 
     // Create execution record
-    const [execution] = await db
-      .insert(workflowExecutions)
-      .values({
-        workflowId,
-        userId: session.user.id,
+    const { data: execution, error: executionError } = await supabase
+      .from("workflow_executions")
+      .insert({
+        workflow_id: workflowId,
+        user_id: user.id,
         status: "running",
         input,
       })
-      .returning();
+      .select()
+      .single();
+
+    if (executionError || !execution) {
+      throw new Error("Failed to create execution record");
+    }
 
     console.log("[API] Created execution:", execution.id);
 

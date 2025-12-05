@@ -1,24 +1,21 @@
-type AuthProvider = "email" | "github" | "google" | "vercel";
+type AuthProvider = "email" | "github" | "google";
 
 type EnabledProviders = {
   email: boolean;
   github: boolean;
   google: boolean;
-  vercel: boolean;
 };
 
 interface WindowWithEnv extends Window {
   ENV?: {
     NEXT_PUBLIC_AUTH_PROVIDERS?: string;
-    NEXT_PUBLIC_GITHUB_CLIENT_ID?: string;
-    NEXT_PUBLIC_GOOGLE_CLIENT_ID?: string;
-    NEXT_PUBLIC_VERCEL_CLIENT_ID?: string;
   };
 }
 
 /**
  * Get the list of enabled authentication providers from environment variables
  * Defaults to email only if not specified
+ * Note: OAuth providers must be configured in Supabase Dashboard
  */
 export function getEnabledAuthProviders(): EnabledProviders {
   const providersEnv =
@@ -34,27 +31,8 @@ export function getEnabledAuthProviders(): EnabledProviders {
 
   return {
     email: enabledProviders.includes("email"),
-    github:
-      enabledProviders.includes("github") &&
-      !!(
-        process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID ||
-        (typeof window !== "undefined" &&
-          (window as WindowWithEnv).ENV?.NEXT_PUBLIC_GITHUB_CLIENT_ID)
-      ),
-    google:
-      enabledProviders.includes("google") &&
-      !!(
-        process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
-        (typeof window !== "undefined" &&
-          (window as WindowWithEnv).ENV?.NEXT_PUBLIC_GOOGLE_CLIENT_ID)
-      ),
-    vercel:
-      enabledProviders.includes("vercel") &&
-      !!(
-        process.env.NEXT_PUBLIC_VERCEL_CLIENT_ID ||
-        (typeof window !== "undefined" &&
-          (window as WindowWithEnv).ENV?.NEXT_PUBLIC_VERCEL_CLIENT_ID)
-      ),
+    github: enabledProviders.includes("github"),
+    google: enabledProviders.includes("google"),
   };
 }
 

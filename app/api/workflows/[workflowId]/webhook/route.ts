@@ -1,10 +1,8 @@
 import { createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { start } from "workflow/api";
-import { db } from "@/lib/db";
-import { validateWorkflowIntegrations } from "@/lib/db/integrations";
-import { apiKeys, workflowExecutions, workflows } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
+import { validateWorkflowIntegrations } from "@/lib/integrations-supabase";
 import { executeWorkflow } from "@/lib/workflow-executor.workflow";
 import type { WorkflowEdge, WorkflowNode } from "@/lib/workflow-store";
 
@@ -34,16 +32,19 @@ async function validateApiKey(
   const keyHash = createHash("sha256").update(key).digest("hex");
 
   // Find the API key in the database
-  const apiKey = await db.query.apiKeys.findFirst({
-    where: eq(apiKeys.keyHash, keyHash),
-  });
+  const supabase = await createClient();
+  const { data: apiKey, error: apiKeyError } = await supabase
+    .from("api_keys")
+    .select("*")
+    .eq("key_hash", keyHash)
+    .single();
 
-  if (!apiKey) {
+  if (apiKeyError || !apiKey) {
     return { valid: false, error: "Invalid API key", statusCode: 401 };
   }
 
   // Verify the API key belongs to the workflow owner
-  if (apiKey.userId !== workflowUserId) {
+  if (apiKey.user_id !== workflowUserId) {
     return {
       valid: false,
       error: "You do not have permission to run this workflow",
@@ -52,9 +53,11 @@ async function validateApiKey(
   }
 
   // Update last used timestamp (don't await, fire and forget)
-  db.update(apiKeys)
-    .set({ lastUsedAt: new Date() })
-    .where(eq(apiKeys.id, apiKey.id))
+  supabase
+    .from("api_keys")
+    .update({ last_used_at: new Date().toISOString() })
+    .eq("id", apiKey.id)
+    .then(() => {})
     .catch(() => {
       // Fire and forget - ignore errors
     });
@@ -104,14 +107,15 @@ async function executeWorkflowBackground(
       error instanceof Error ? error.stack : "N/A"
     );
 
-    await db
-      .update(workflowExecutions)
-      .set({
+    const supabase = await createClient();
+    await supabase
+      .from("workflow_executions")
+      .update({
         status: "error",
         error: error instanceof Error ? error.message : "Unknown error",
-        completedAt: new Date(),
+        completed_at: new Date().toISOString(),
       })
-      .where(eq(workflowExecutions.id, executionId));
+      .eq("id", executionId);
   }
 }
 
@@ -127,11 +131,14 @@ export async function POST(
     const { workflowId } = await context.params;
 
     // Get workflow
-    const workflow = await db.query.workflows.findFirst({
-      where: eq(workflows.id, workflowId),
-    });
+    const supabase = await createClient();
+    const { data: workflow, error: workflowError } = await supabase
+      .from("workflows")
+      .select("*")
+      .eq("id", workflowId)
+      .single();
 
-    if (!workflow) {
+    if (workflowError || !workflow) {
       return NextResponse.json(
         { error: "Workflow not found" },
         { status: 404, headers: corsHeaders }
@@ -140,7 +147,7 @@ export async function POST(
 
     // Validate API key - must belong to the workflow owner
     const authHeader = request.headers.get("Authorization");
-    const apiKeyValidation = await validateApiKey(authHeader, workflow.userId);
+    const apiKeyValidation = await validateApiKey(authHeader, workflow.user_id);
 
     if (!apiKeyValidation.valid) {
       return NextResponse.json(
@@ -164,7 +171,7 @@ export async function POST(
     // Validate that all integrationIds in workflow nodes belong to the workflow owner
     const validation = await validateWorkflowIntegrations(
       workflow.nodes as WorkflowNode[],
-      workflow.userId
+      workflow.user_id
     );
     if (!validation.valid) {
       console.error(
@@ -181,15 +188,20 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
 
     // Create execution record
-    const [execution] = await db
-      .insert(workflowExecutions)
-      .values({
-        workflowId,
-        userId: workflow.userId,
+    const { data: execution, error: executionError } = await supabase
+      .from("workflow_executions")
+      .insert({
+        workflow_id: workflowId,
+        user_id: workflow.user_id,
         status: "running",
         input: body,
       })
-      .returning();
+      .select()
+      .single();
+
+    if (executionError || !execution) {
+      throw new Error("Failed to create execution record");
+    }
 
     console.log("[Webhook] Created execution:", execution.id);
 

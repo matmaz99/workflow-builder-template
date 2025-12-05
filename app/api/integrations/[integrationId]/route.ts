@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import {
   deleteIntegration,
   getIntegration,
   updateIntegration,
-} from "@/lib/db/integrations";
+} from "@/lib/integrations-supabase";
 import type { IntegrationConfig } from "@/lib/types/integration";
 
 export type GetIntegrationResponse = {
@@ -31,15 +31,14 @@ export async function GET(
 ) {
   try {
     const { integrationId } = await context.params;
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const integration = await getIntegration(integrationId, session.user.id);
+    const integration = await getIntegration(integrationId, user.id);
 
     if (!integration) {
       return NextResponse.json(
@@ -80,11 +79,10 @@ export async function PUT(
 ) {
   try {
     const { integrationId } = await context.params;
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -92,7 +90,7 @@ export async function PUT(
 
     const integration = await updateIntegration(
       integrationId,
-      session.user.id,
+      user.id,
       body
     );
 
@@ -135,15 +133,14 @@ export async function DELETE(
 ) {
   try {
     const { integrationId } = await context.params;
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const success = await deleteIntegration(integrationId, session.user.id);
+    const success = await deleteIntegration(integrationId, user.id);
 
     if (!success) {
       return NextResponse.json(

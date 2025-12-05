@@ -1,6 +1,6 @@
 import { streamText } from "ai";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { generateAIActionPrompts } from "@/plugins";
 
 // Simple type for operations
@@ -248,11 +248,10 @@ REMEMBER: After adding all nodes, you MUST add edges to connect them! Every node
 
 export async function POST(request: Request) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -310,7 +309,7 @@ User's request: ${prompt}
 
 IMPORTANT: Output ONLY the operations needed to make the requested changes.
 - If adding new nodes: output "addNode" operations for NEW nodes only, then IMMEDIATELY output "addEdge" operations to connect them to the workflow
-- If adding new edges: output "addEdge" operations for NEW edges only  
+- If adding new edges: output "addEdge" operations for NEW edges only
 - If removing nodes: output "removeNode" operations with the nodeId to remove
 - If removing edges: output "removeEdge" operations with the edgeId to remove
 - If changing name/description: output "setName"/"setDescription" only if changed

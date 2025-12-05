@@ -1,9 +1,6 @@
-import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { workflows } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
 import { generateId } from "@/lib/utils/id";
 
 // Node type for type-safe node manipulation
@@ -72,27 +69,28 @@ export async function POST(
 ) {
   try {
     const { workflowId } = await context.params;
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Find the workflow to duplicate
-    const sourceWorkflow = await db.query.workflows.findFirst({
-      where: eq(workflows.id, workflowId),
-    });
+    const { data: sourceWorkflow, error: sourceError } = await supabase
+      .from("workflows")
+      .select("*")
+      .eq("id", workflowId)
+      .single();
 
-    if (!sourceWorkflow) {
+    if (sourceError || !sourceWorkflow) {
       return NextResponse.json(
         { error: "Workflow not found" },
         { status: 404 }
       );
     }
 
-    const isOwner = session.user.id === sourceWorkflow.userId;
+    const isOwner = user.id === sourceWorkflow.user_id;
 
     // If not owner, check if workflow is public
     if (!isOwner && sourceWorkflow.visibility !== "public") {
@@ -112,14 +110,19 @@ export async function POST(
     );
 
     // Count user's workflows to generate unique name
-    const userWorkflows = await db.query.workflows.findMany({
-      where: eq(workflows.userId, session.user.id),
-    });
+    const { data: userWorkflows, error: userWorkflowsError } = await supabase
+      .from("workflows")
+      .select("name")
+      .eq("user_id", user.id);
+
+    if (userWorkflowsError) {
+      throw userWorkflowsError;
+    }
 
     // Generate a unique name
     const baseName = `${sourceWorkflow.name} (Copy)`;
     let workflowName = baseName;
-    const existingNames = new Set(userWorkflows.map((w) => w.name));
+    const existingNames = new Set((userWorkflows || []).map((w) => w.name));
 
     if (existingNames.has(workflowName)) {
       let counter = 2;
@@ -131,23 +134,28 @@ export async function POST(
 
     // Create the duplicated workflow
     const newWorkflowId = generateId();
-    const [newWorkflow] = await db
-      .insert(workflows)
-      .values({
+    const { data: newWorkflow, error: insertError } = await supabase
+      .from("workflows")
+      .insert({
         id: newWorkflowId,
         name: workflowName,
         description: sourceWorkflow.description,
         nodes: newNodes,
         edges: newEdges,
-        userId: session.user.id,
+        user_id: user.id,
         visibility: "private", // Duplicated workflows are always private
       })
-      .returning();
+      .select()
+      .single();
+
+    if (insertError || !newWorkflow) {
+      throw insertError || new Error("Failed to create workflow");
+    }
 
     return NextResponse.json({
       ...newWorkflow,
-      createdAt: newWorkflow.createdAt.toISOString(),
-      updatedAt: newWorkflow.updatedAt.toISOString(),
+      createdAt: newWorkflow.created_at,
+      updatedAt: newWorkflow.updated_at,
       isOwner: true,
     });
   } catch (error) {

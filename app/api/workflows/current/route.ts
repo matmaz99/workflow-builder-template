@@ -1,33 +1,30 @@
-import { and, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { workflows } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
 import { generateId } from "@/lib/utils/id";
 
 const CURRENT_WORKFLOW_NAME = "~~__CURRENT__~~";
 
 export async function GET(request: Request) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [currentWorkflow] = await db
-      .select()
-      .from(workflows)
-      .where(
-        and(
-          eq(workflows.name, CURRENT_WORKFLOW_NAME),
-          eq(workflows.userId, session.user.id)
-        )
-      )
-      .orderBy(desc(workflows.updatedAt))
-      .limit(1);
+    const { data: currentWorkflow, error } = await supabase
+      .from("workflows")
+      .select("*")
+      .eq("name", CURRENT_WORKFLOW_NAME)
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      throw error;
+    }
 
     if (!currentWorkflow) {
       // Return empty workflow if no current state exists
@@ -58,11 +55,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -77,28 +73,28 @@ export async function POST(request: Request) {
     }
 
     // Check if current workflow exists
-    const [existingWorkflow] = await db
-      .select()
-      .from(workflows)
-      .where(
-        and(
-          eq(workflows.name, CURRENT_WORKFLOW_NAME),
-          eq(workflows.userId, session.user.id)
-        )
-      )
-      .limit(1);
+    const { data: existingWorkflow } = await supabase
+      .from("workflows")
+      .select("id")
+      .eq("name", CURRENT_WORKFLOW_NAME)
+      .eq("user_id", user.id)
+      .limit(1)
+      .single();
 
     if (existingWorkflow) {
       // Update existing current workflow
-      const [updatedWorkflow] = await db
-        .update(workflows)
-        .set({
+      const { data: updatedWorkflow, error } = await supabase
+        .from("workflows")
+        .update({
           nodes,
           edges,
-          updatedAt: new Date(),
+          updated_at: new Date().toISOString(),
         })
-        .where(eq(workflows.id, existingWorkflow.id))
-        .returning();
+        .eq("id", existingWorkflow.id)
+        .select()
+        .single();
+
+      if (error) throw error;
 
       return NextResponse.json({
         id: updatedWorkflow.id,
@@ -110,17 +106,20 @@ export async function POST(request: Request) {
     // Create new current workflow
     const workflowId = generateId();
 
-    const [savedWorkflow] = await db
-      .insert(workflows)
-      .values({
+    const { data: savedWorkflow, error } = await supabase
+      .from("workflows")
+      .insert({
         id: workflowId,
         name: CURRENT_WORKFLOW_NAME,
         description: "Auto-saved current workflow",
         nodes,
         edges,
-        userId: session.user.id,
+        user_id: user.id,
       })
-      .returning();
+      .select()
+      .single();
+
+    if (error) throw error;
 
     return NextResponse.json({
       id: savedWorkflow.id,

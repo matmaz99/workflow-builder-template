@@ -1,8 +1,5 @@
-import { and, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { workflowExecutions, workflows } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET(
   request: Request,
@@ -10,23 +7,22 @@ export async function GET(
 ) {
   try {
     const { workflowId } = await context.params;
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Verify workflow ownership
-    const workflow = await db.query.workflows.findFirst({
-      where: and(
-        eq(workflows.id, workflowId),
-        eq(workflows.userId, session.user.id)
-      ),
-    });
+    const { data: workflow, error: workflowError } = await supabase
+      .from("workflows")
+      .select("*")
+      .eq("id", workflowId)
+      .eq("user_id", user.id)
+      .single();
 
-    if (!workflow) {
+    if (workflowError || !workflow) {
       return NextResponse.json(
         { error: "Workflow not found" },
         { status: 404 }
@@ -34,13 +30,18 @@ export async function GET(
     }
 
     // Fetch executions
-    const executions = await db.query.workflowExecutions.findMany({
-      where: eq(workflowExecutions.workflowId, workflowId),
-      orderBy: [desc(workflowExecutions.startedAt)],
-      limit: 50,
-    });
+    const { data: executions, error: executionsError } = await supabase
+      .from("workflow_executions")
+      .select("*")
+      .eq("workflow_id", workflowId)
+      .order("started_at", { ascending: false })
+      .limit(50);
 
-    return NextResponse.json(executions);
+    if (executionsError) {
+      throw executionsError;
+    }
+
+    return NextResponse.json(executions || []);
   } catch (error) {
     console.error("Failed to get executions:", error);
     return NextResponse.json(
@@ -59,23 +60,22 @@ export async function DELETE(
 ) {
   try {
     const { workflowId } = await context.params;
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Verify workflow ownership
-    const workflow = await db.query.workflows.findFirst({
-      where: and(
-        eq(workflows.id, workflowId),
-        eq(workflows.userId, session.user.id)
-      ),
-    });
+    const { data: workflow, error: workflowError } = await supabase
+      .from("workflows")
+      .select("*")
+      .eq("id", workflowId)
+      .eq("user_id", user.id)
+      .single();
 
-    if (!workflow) {
+    if (workflowError || !workflow) {
       return NextResponse.json(
         { error: "Workflow not found" },
         { status: 404 }
@@ -83,26 +83,37 @@ export async function DELETE(
     }
 
     // Get all execution IDs for this workflow
-    const executions = await db.query.workflowExecutions.findMany({
-      where: eq(workflowExecutions.workflowId, workflowId),
-      columns: { id: true },
-    });
+    const { data: executions, error: executionsError } = await supabase
+      .from("workflow_executions")
+      .select("id")
+      .eq("workflow_id", workflowId);
 
-    const executionIds = executions.map((e) => e.id);
+    if (executionsError) {
+      throw executionsError;
+    }
+
+    const executionIds = (executions || []).map((e) => e.id);
 
     // Delete logs first (if there are any executions)
     if (executionIds.length > 0) {
-      const { workflowExecutionLogs } = await import("@/lib/db/schema");
-      const { inArray } = await import("drizzle-orm");
+      const { error: logsDeleteError } = await supabase
+        .from("workflow_execution_logs")
+        .delete()
+        .in("execution_id", executionIds);
 
-      await db
-        .delete(workflowExecutionLogs)
-        .where(inArray(workflowExecutionLogs.executionId, executionIds));
+      if (logsDeleteError) {
+        throw logsDeleteError;
+      }
 
       // Then delete the executions
-      await db
-        .delete(workflowExecutions)
-        .where(eq(workflowExecutions.workflowId, workflowId));
+      const { error: executionsDeleteError } = await supabase
+        .from("workflow_executions")
+        .delete()
+        .eq("workflow_id", workflowId);
+
+      if (executionsDeleteError) {
+        throw executionsDeleteError;
+      }
     }
 
     return NextResponse.json({

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { createIntegration, getIntegrations } from "@/lib/db/integrations";
+import { createClient } from "@/lib/supabase/server";
+import {
+  createIntegration,
+  getIntegrations,
+} from "@/lib/integrations-supabase";
 import type {
   IntegrationConfig,
   IntegrationType,
@@ -35,11 +38,12 @@ export type CreateIntegrationResponse = {
  */
 export async function GET(request: Request) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -47,10 +51,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const typeFilter = searchParams.get("type") as IntegrationType | null;
 
-    const integrations = await getIntegrations(
-      session.user.id,
-      typeFilter || undefined
-    );
+    const integrations = await getIntegrations(user.id, typeFilter || undefined);
 
     // Return integrations without config for security
     const response: GetIntegrationsResponse = integrations.map(
@@ -82,11 +83,12 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -100,7 +102,7 @@ export async function POST(request: Request) {
     }
 
     const integration = await createIntegration(
-      session.user.id,
+      user.id,
       body.name,
       body.type,
       body.config

@@ -1,45 +1,35 @@
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { accounts, users } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userData = await db.query.users.findFirst({
-      where: eq(users.id, session.user.id),
-      columns: {
-        id: true,
-        name: true,
-        email: true,
-        image: true,
-        isAnonymous: true,
-      },
-    });
+    const { data: userData, error } = await supabase
+      .from("users")
+      .select("id, name, email, image, is_anonymous")
+      .eq("id", user.id)
+      .single();
 
-    if (!userData) {
+    if (error || !userData) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // Get the user's account to determine auth provider
-    const userAccount = await db.query.accounts.findFirst({
-      where: eq(accounts.userId, session.user.id),
-      columns: {
-        providerId: true,
-      },
-    });
+    const { data: userAccount } = await supabase
+      .from("accounts")
+      .select("provider_id")
+      .eq("user_id", user.id)
+      .single();
 
     return NextResponse.json({
       ...userData,
-      providerId: userAccount?.providerId ?? null,
+      providerId: userAccount?.provider_id ?? null,
     });
   } catch (error) {
     console.error("Failed to get user:", error);
@@ -54,25 +44,23 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Check if user is an OAuth user (can't update profile)
-    const userAccount = await db.query.accounts.findFirst({
-      where: eq(accounts.userId, session.user.id),
-      columns: {
-        providerId: true,
-      },
-    });
+    const { data: userAccount } = await supabase
+      .from("accounts")
+      .select("provider_id")
+      .eq("user_id", user.id)
+      .single();
 
     // Block updates for OAuth users (vercel, github, google, etc.)
     const oauthProviders = ["vercel", "github", "google"];
-    if (userAccount && oauthProviders.includes(userAccount.providerId)) {
+    if (userAccount && oauthProviders.includes(userAccount.provider_id)) {
       return NextResponse.json(
         { error: "Cannot update profile for OAuth users" },
         { status: 403 }
@@ -89,7 +77,14 @@ export async function PATCH(request: Request) {
       updates.email = body.email;
     }
 
-    await db.update(users).set(updates).where(eq(users.id, session.user.id));
+    const { error } = await supabase
+      .from("users")
+      .update(updates)
+      .eq("id", user.id);
+
+    if (error) {
+      throw error;
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

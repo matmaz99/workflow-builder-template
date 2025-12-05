@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import postgres from "postgres";
-import { auth } from "@/lib/auth";
-import { getIntegration as getIntegrationFromDb } from "@/lib/db/integrations";
+import { createClient } from "@/lib/supabase/server";
+import { getIntegration as getIntegrationFromDb } from "@/lib/integrations-supabase";
 import {
   getCredentialMapping,
   getIntegration as getPluginFromRegistry,
@@ -17,11 +17,10 @@ export async function POST(
   { params }: { params: Promise<{ integrationId: string }> }
 ) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -36,7 +35,7 @@ export async function POST(
 
     const integration = await getIntegrationFromDb(
       integrationId,
-      session.user.id
+      user.id
     );
 
     if (!integration) {

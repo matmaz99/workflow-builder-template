@@ -1,29 +1,37 @@
-import { desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { workflows } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json([], { status: 200 });
     }
 
-    const userWorkflows = await db
-      .select()
-      .from(workflows)
-      .where(eq(workflows.userId, session.user.id))
-      .orderBy(desc(workflows.updatedAt));
+    const { data: userWorkflows, error } = await supabase
+      .from("workflows")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
 
-    const mappedWorkflows = userWorkflows.map((workflow) => ({
-      ...workflow,
-      createdAt: workflow.createdAt.toISOString(),
-      updatedAt: workflow.updatedAt.toISOString(),
+    if (error) {
+      throw error;
+    }
+
+    const mappedWorkflows = (userWorkflows || []).map((workflow) => ({
+      id: workflow.id,
+      name: workflow.name,
+      description: workflow.description,
+      nodes: workflow.nodes,
+      edges: workflow.edges,
+      visibility: workflow.visibility,
+      userId: workflow.user_id,
+      createdAt: workflow.created_at,
+      updatedAt: workflow.updated_at,
     }));
 
     return NextResponse.json(mappedWorkflows);

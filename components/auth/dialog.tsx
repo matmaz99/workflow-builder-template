@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
-import { signIn, signUp } from "@/lib/auth-client";
+import { signIn, signUp } from "@/lib/auth-client-supabase";
 import {
   getEnabledAuthProviders,
   getSingleProvider,
@@ -24,19 +24,6 @@ import {
 type AuthDialogProps = {
   children?: ReactNode;
 };
-
-const VercelIcon = ({ className = "mr-2 h-3 w-3" }: { className?: string }) => (
-  <svg
-    aria-label="Vercel"
-    className={className}
-    fill="currentColor"
-    role="img"
-    viewBox="0 0 76 65"
-  >
-    <title>Vercel</title>
-    <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-  </svg>
-);
 
 const GitHubIcon = () => (
   <svg
@@ -97,13 +84,10 @@ const EmailIcon = () => (
   </svg>
 );
 
-type Provider = "email" | "github" | "google" | "vercel";
+type Provider = "email" | "github" | "google";
 
 const getProviderIcon = (provider: Provider, compact = false) => {
-  const iconClass = compact ? "size-3.5" : undefined;
   switch (provider) {
-    case "vercel":
-      return <VercelIcon className={iconClass} />;
     case "github":
       return <GitHubIcon />;
     case "google":
@@ -117,8 +101,6 @@ const getProviderIcon = (provider: Provider, compact = false) => {
 
 const getProviderLabel = (provider: Provider) => {
   switch (provider) {
-    case "vercel":
-      return "Vercel";
     case "github":
       return "GitHub";
     case "google":
@@ -229,12 +211,11 @@ const EmailForm = ({
 
 type SocialButtonsProps = {
   enabledProviders: {
-    vercel: boolean;
     github: boolean;
     google: boolean;
   };
-  onSignIn: (provider: "github" | "google" | "vercel") => void;
-  loadingProvider: "github" | "google" | "vercel" | null;
+  onSignIn: (provider: "github" | "google") => void;
+  loadingProvider: "github" | "google" | null;
 };
 
 const SocialButtons = ({
@@ -243,18 +224,6 @@ const SocialButtons = ({
   loadingProvider,
 }: SocialButtonsProps) => (
   <div className="flex flex-col gap-2">
-    {enabledProviders.vercel && (
-      <Button
-        className="w-full"
-        disabled={loadingProvider !== null}
-        onClick={() => onSignIn("vercel")}
-        type="button"
-        variant="outline"
-      >
-        <VercelIcon />
-        {loadingProvider === "vercel" ? "Loading..." : "Sign In with Vercel"}
-      </Button>
-    )}
     {enabledProviders.github && (
       <Button
         className="w-full"
@@ -283,9 +252,7 @@ const SocialButtons = ({
 );
 
 type UseAuthHandlers = {
-  handleSocialSignIn: (
-    provider: "github" | "google" | "vercel"
-  ) => Promise<void>;
+  handleSocialSignIn: (provider: "github" | "google") => Promise<void>;
   handleEmailAuth: (e: React.FormEvent) => Promise<void>;
   toggleMode: () => void;
 };
@@ -298,7 +265,7 @@ type AuthHandlersOptions = {
   name: string;
   setError: (error: string) => void;
   setLoading: (loading: boolean) => void;
-  setLoadingProvider: (provider: "github" | "google" | "vercel" | null) => void;
+  setLoadingProvider: (provider: "github" | "google" | null) => void;
   setOpen: (open: boolean) => void;
 };
 
@@ -315,9 +282,7 @@ const useAuthHandlers = (options: AuthHandlersOptions): UseAuthHandlers => {
     setOpen,
   } = options;
 
-  const handleSocialSignIn = async (
-    provider: "github" | "google" | "vercel"
-  ) => {
+  const handleSocialSignIn = async (provider: "github" | "google") => {
     try {
       setLoadingProvider(provider);
       await signIn.social({ provider, callbackURL: window.location.pathname });
@@ -397,8 +362,8 @@ const useAuthHandlers = (options: AuthHandlersOptions): UseAuthHandlers => {
 
 type SingleProviderButtonProps = {
   provider: Provider;
-  loadingProvider: "github" | "google" | "vercel" | null;
-  onSignIn: (provider: "github" | "google" | "vercel") => Promise<void>;
+  loadingProvider: "github" | "google" | null;
+  onSignIn: (provider: "github" | "google") => Promise<void>;
 };
 
 // Module-level flag to persist sign-in loading state across component remounts
@@ -420,7 +385,7 @@ const SingleProviderButton = ({
   const handleClick = () => {
     singleProviderSignInInitiated = true;
     setIsInitiated(true);
-    onSignIn(provider as "github" | "google" | "vercel");
+    onSignIn(provider as "github" | "google");
   };
 
   return (
@@ -513,13 +478,12 @@ const EmailOnlyDialog = ({
 
 type MultiProviderDialogProps = EmailOnlyDialogProps & {
   enabledProviders: {
-    vercel: boolean;
     github: boolean;
     google: boolean;
     email: boolean;
   };
-  loadingProvider: "github" | "google" | "vercel" | null;
-  onSignIn: (provider: "github" | "google" | "vercel") => Promise<void>;
+  loadingProvider: "github" | "google" | null;
+  onSignIn: (provider: "github" | "google") => Promise<void>;
 };
 
 const MultiProviderDialog = ({
@@ -541,10 +505,7 @@ const MultiProviderDialog = ({
   onToggleMode,
   onSignIn,
 }: MultiProviderDialogProps) => {
-  const hasSocialProviders =
-    enabledProviders.vercel ||
-    enabledProviders.github ||
-    enabledProviders.google;
+  const hasSocialProviders = enabledProviders.github || enabledProviders.google;
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -619,7 +580,7 @@ export const AuthDialog = ({ children }: AuthDialogProps) => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingProvider, setLoadingProvider] = useState<
-    "github" | "google" | "vercel" | null
+    "github" | "google" | null
   >(null);
 
   const enabledProviders = getEnabledAuthProviders();

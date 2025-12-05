@@ -1,9 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { apiKeys } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
 
 // Generate a secure API key
 function generateApiKey(): { key: string; hash: string; prefix: string } {
@@ -17,27 +14,24 @@ function generateApiKey(): { key: string; hash: string; prefix: string } {
 // GET - List all API keys for the current user
 export async function GET(request: Request) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const keys = await db.query.apiKeys.findMany({
-      where: eq(apiKeys.userId, session.user.id),
-      columns: {
-        id: true,
-        name: true,
-        keyPrefix: true,
-        createdAt: true,
-        lastUsedAt: true,
-      },
-      orderBy: (table, { desc }) => [desc(table.createdAt)],
-    });
+    const { data: keys, error } = await supabase
+      .from("api_keys")
+      .select("id, name, key_prefix, created_at, last_used_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
 
-    return NextResponse.json(keys);
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json(keys || []);
   } catch (error) {
     console.error("Failed to list API keys:", error);
     return NextResponse.json(
@@ -50,18 +44,25 @@ export async function GET(request: Request) {
 // POST - Create a new API key
 export async function POST(request: Request) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Get user metadata to check if anonymous
+    const { data: userData } = await supabase
+      .from("users")
+      .select("name, email, is_anonymous")
+      .eq("id", user.id)
+      .single();
+
     // Check if user is anonymous
     const isAnonymous =
-      session.user.name === "Anonymous" ||
-      session.user.email?.startsWith("temp-");
+      userData?.is_anonymous ||
+      userData?.name === "Anonymous" ||
+      userData?.email?.startsWith("temp-");
 
     if (isAnonymous) {
       return NextResponse.json(
@@ -77,20 +78,20 @@ export async function POST(request: Request) {
     const { key, hash, prefix } = generateApiKey();
 
     // Save to database
-    const [newKey] = await db
-      .insert(apiKeys)
-      .values({
-        userId: session.user.id,
+    const { data: newKey, error } = await supabase
+      .from("api_keys")
+      .insert({
+        user_id: user.id,
         name,
-        keyHash: hash,
-        keyPrefix: prefix,
+        key_hash: hash,
+        key_prefix: prefix,
       })
-      .returning({
-        id: apiKeys.id,
-        name: apiKeys.name,
-        keyPrefix: apiKeys.keyPrefix,
-        createdAt: apiKeys.createdAt,
-      });
+      .select("id, name, key_prefix, created_at")
+      .single();
+
+    if (error || !newKey) {
+      throw error || new Error("Failed to create API key");
+    }
 
     // Return the full key only on creation (won't be shown again)
     return NextResponse.json({

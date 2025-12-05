@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { api } from "@/lib/api-client";
-import { signOut, useSession } from "@/lib/auth-client";
+import { signOut, useSession } from "@/lib/auth-client-supabase";
 
 export const UserMenu = () => {
   const { data: session, isPending } = useSession();
@@ -38,7 +38,7 @@ export const UserMenu = () => {
 
   // Fetch provider info when session is available
   useEffect(() => {
-    if (session?.user && !session.user.name?.startsWith("Anonymous")) {
+    if (session?.user) {
       api.user
         .get()
         .then((user) => setProviderId(user.providerId))
@@ -51,10 +51,7 @@ export const UserMenu = () => {
   };
 
   // OAuth users can't edit their profile
-  const isOAuthUser =
-    providerId === "vercel" ||
-    providerId === "github" ||
-    providerId === "google";
+  const isOAuthUser = providerId === "github" || providerId === "google";
 
   const getUserInitials = () => {
     if (session?.user?.name) {
@@ -81,15 +78,8 @@ export const UserMenu = () => {
     );
   }
 
-  // Check if user is anonymous
-  // Better Auth anonymous plugin creates users with name "Anonymous" and temp- email
-  const isAnonymous =
-    !session?.user ||
-    session.user.name === "Anonymous" ||
-    session.user.email?.startsWith("temp-");
-
-  // Show Sign In button if user is anonymous or not logged in
-  if (isAnonymous) {
+  // Show Sign In button if user is not logged in
+  if (!session?.user) {
     return (
       <div className="flex items-center gap-2">
         <AuthDialog>

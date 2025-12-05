@@ -1,10 +1,9 @@
 import "server-only";
 
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
-import type { IntegrationConfig, IntegrationType } from "../types/integration";
-import { db } from "./index";
-import { integrations, type NewIntegration } from "./schema";
+import type { IntegrationConfig, IntegrationType } from "./types/integration";
+import { createClient } from "./supabase/server";
+import { createAdminClient } from "./supabase/admin";
 
 // Encryption configuration
 const ALGORITHM = "aes-256-gcm";
@@ -112,67 +111,90 @@ export async function getIntegrations(
   userId: string,
   type?: IntegrationType
 ): Promise<DecryptedIntegration[]> {
-  const conditions = [eq(integrations.userId, userId)];
+  const supabase = await createClient();
+
+  let query = supabase.from("integrations").select("*").eq("user_id", userId);
 
   if (type) {
-    conditions.push(eq(integrations.type, type));
+    query = query.eq("type", type);
   }
 
-  const results = await db
-    .select()
-    .from(integrations)
-    .where(and(...conditions));
+  const { data, error } = await query;
 
-  return results.map((integration) => ({
-    ...integration,
-    config: decryptConfig(integration.config as string) as IntegrationConfig,
+  if (error) {
+    console.error("Failed to get integrations:", error);
+    return [];
+  }
+
+  return (data || []).map((integration) => ({
+    id: integration.id,
+    userId: integration.user_id,
+    name: integration.name,
+    type: integration.type as IntegrationType,
+    config: decryptConfig(integration.config) as IntegrationConfig,
+    createdAt: new Date(integration.created_at),
+    updatedAt: new Date(integration.updated_at),
   }));
 }
 
 /**
- * Get a single integration by ID
+ * Get a single integration by ID (with user validation via RLS)
  */
 export async function getIntegration(
   integrationId: string,
   userId: string
 ): Promise<DecryptedIntegration | null> {
-  const result = await db
-    .select()
-    .from(integrations)
-    .where(
-      and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
-    )
-    .limit(1);
+  const supabase = await createClient();
 
-  if (result.length === 0) {
+  const { data, error } = await supabase
+    .from("integrations")
+    .select("*")
+    .eq("id", integrationId)
+    .eq("user_id", userId)
+    .single();
+
+  if (error || !data) {
     return null;
   }
 
   return {
-    ...result[0],
-    config: decryptConfig(result[0].config as string) as IntegrationConfig,
+    id: data.id,
+    userId: data.user_id,
+    name: data.name,
+    type: data.type as IntegrationType,
+    config: decryptConfig(data.config) as IntegrationConfig,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
   };
 }
 
 /**
  * Get a single integration by ID without user check (for system use during workflow execution)
+ * Uses admin client to bypass RLS
  */
 export async function getIntegrationById(
   integrationId: string
 ): Promise<DecryptedIntegration | null> {
-  const result = await db
-    .select()
-    .from(integrations)
-    .where(eq(integrations.id, integrationId))
-    .limit(1);
+  const supabase = createAdminClient();
 
-  if (result.length === 0) {
+  const { data, error } = await supabase
+    .from("integrations")
+    .select("*")
+    .eq("id", integrationId)
+    .single();
+
+  if (error || !data) {
     return null;
   }
 
   return {
-    ...result[0],
-    config: decryptConfig(result[0].config as string) as IntegrationConfig,
+    id: data.id,
+    userId: data.user_id,
+    name: data.name,
+    type: data.type as IntegrationType,
+    config: decryptConfig(data.config) as IntegrationConfig,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
   };
 }
 
@@ -185,21 +207,32 @@ export async function createIntegration(
   type: IntegrationType,
   config: IntegrationConfig
 ): Promise<DecryptedIntegration> {
+  const supabase = await createClient();
   const encryptedConfig = encryptConfig(config);
 
-  const [result] = await db
-    .insert(integrations)
-    .values({
-      userId,
+  const { data, error } = await supabase
+    .from("integrations")
+    .insert({
+      user_id: userId,
       name,
       type,
       config: encryptedConfig,
     })
-    .returning();
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message || "Failed to create integration");
+  }
 
   return {
-    ...result,
+    id: data.id,
+    userId: data.user_id,
+    name: data.name,
+    type: data.type as IntegrationType,
     config,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
   };
 }
 
@@ -214,8 +247,10 @@ export async function updateIntegration(
     config?: IntegrationConfig;
   }
 ): Promise<DecryptedIntegration | null> {
-  const updateData: Partial<NewIntegration> = {
-    updatedAt: new Date(),
+  const supabase = await createClient();
+
+  const updateData: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
   };
 
   if (updates.name !== undefined) {
@@ -226,21 +261,26 @@ export async function updateIntegration(
     updateData.config = encryptConfig(updates.config);
   }
 
-  const [result] = await db
-    .update(integrations)
-    .set(updateData)
-    .where(
-      and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
-    )
-    .returning();
+  const { data, error } = await supabase
+    .from("integrations")
+    .update(updateData)
+    .eq("id", integrationId)
+    .eq("user_id", userId)
+    .select()
+    .single();
 
-  if (!result) {
+  if (error || !data) {
     return null;
   }
 
   return {
-    ...result,
-    config: decryptConfig(result.config as string) as IntegrationConfig,
+    id: data.id,
+    userId: data.user_id,
+    name: data.name,
+    type: data.type as IntegrationType,
+    config: decryptConfig(data.config) as IntegrationConfig,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
   };
 }
 
@@ -251,14 +291,20 @@ export async function deleteIntegration(
   integrationId: string,
   userId: string
 ): Promise<boolean> {
-  const result = await db
-    .delete(integrations)
-    .where(
-      and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
-    )
-    .returning();
+  const supabase = await createClient();
 
-  return result.length > 0;
+  const { error, count } = await supabase
+    .from("integrations")
+    .delete()
+    .eq("id", integrationId)
+    .eq("user_id", userId);
+
+  if (error) {
+    console.error("Failed to delete integration:", error);
+    return false;
+  }
+
+  return (count ?? 0) > 0 || !error;
 }
 
 /**
@@ -299,6 +345,8 @@ export function extractIntegrationIds(
  * foreign integration IDs in their workflows, while allowing workflows
  * with references to deleted integrations to still be saved.
  *
+ * Uses admin client to check all integrations regardless of RLS
+ *
  * @returns Object with `valid` boolean and optional `invalidIds` array
  */
 export async function validateWorkflowIntegrations(
@@ -311,17 +359,24 @@ export async function validateWorkflowIntegrations(
     return { valid: true };
   }
 
+  const supabase = createAdminClient();
+
   // Query for ALL integrations with these IDs (regardless of user)
   // to check if any belong to other users
-  const existingIntegrations = await db
-    .select({ id: integrations.id, userId: integrations.userId })
-    .from(integrations)
-    .where(inArray(integrations.id, integrationIds));
+  const { data: existingIntegrations, error } = await supabase
+    .from("integrations")
+    .select("id, user_id")
+    .in("id", integrationIds);
+
+  if (error) {
+    console.error("Failed to validate integrations:", error);
+    return { valid: false };
+  }
 
   // Find integrations that exist but belong to a different user
   // (deleted integrations won't appear here, which is fine)
-  const invalidIds = existingIntegrations
-    .filter((i) => i.userId !== userId)
+  const invalidIds = (existingIntegrations || [])
+    .filter((i) => i.user_id !== userId)
     .map((i) => i.id);
 
   if (invalidIds.length > 0) {

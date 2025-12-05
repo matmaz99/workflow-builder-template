@@ -1,8 +1,5 @@
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { workflowExecutionLogs, workflowExecutions } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
 
 type NodeStatus = {
   nodeId: string;
@@ -15,23 +12,24 @@ export async function GET(
 ) {
   try {
     const { executionId } = await context.params;
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Get the execution and verify ownership
-    const execution = await db.query.workflowExecutions.findFirst({
-      where: eq(workflowExecutions.id, executionId),
-      with: {
-        workflow: true,
-      },
-    });
+    const { data: execution, error: executionError } = await supabase
+      .from("workflow_executions")
+      .select(`
+        *,
+        workflow:workflows(*)
+      `)
+      .eq("id", executionId)
+      .single();
 
-    if (!execution) {
+    if (executionError || !execution) {
       return NextResponse.json(
         { error: "Execution not found" },
         { status: 404 }
@@ -39,18 +37,23 @@ export async function GET(
     }
 
     // Verify the workflow belongs to the user
-    if (execution.workflow.userId !== session.user.id) {
+    if (execution.workflow.user_id !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Get logs for all nodes
-    const logs = await db.query.workflowExecutionLogs.findMany({
-      where: eq(workflowExecutionLogs.executionId, executionId),
-    });
+    const { data: logs, error: logsError } = await supabase
+      .from("workflow_execution_logs")
+      .select("*")
+      .eq("execution_id", executionId);
+
+    if (logsError) {
+      throw logsError;
+    }
 
     // Map logs to node statuses
-    const nodeStatuses: NodeStatus[] = logs.map((log) => ({
-      nodeId: log.nodeId,
+    const nodeStatuses: NodeStatus[] = (logs || []).map((log) => ({
+      nodeId: log.node_id,
       status: log.status,
     }));
 

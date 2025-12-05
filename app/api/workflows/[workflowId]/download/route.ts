@@ -1,10 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { workflows } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
 import { generateWorkflowModule } from "@/lib/workflow-codegen";
 import type { WorkflowEdge, WorkflowNode } from "@/lib/workflow-store";
 import { getAllEnvVars, getDependenciesForActions } from "@/plugins";
@@ -95,10 +92,10 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    
+
     // Start the workflow execution
     await start(${functionName}, [body]);
-    
+
     return NextResponse.json({
       success: true,
       message: 'Workflow started successfully',
@@ -209,22 +206,21 @@ export async function GET(
 ) {
   try {
     const { workflowId } = await context.params;
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const workflow = await db.query.workflows.findFirst({
-      where: and(
-        eq(workflows.id, workflowId),
-        eq(workflows.userId, session.user.id)
-      ),
-    });
+    const { data: workflow, error } = await supabase
+      .from("workflows")
+      .select("*")
+      .eq("id", workflowId)
+      .eq("user_id", user.id)
+      .single();
 
-    if (!workflow) {
+    if (error || !workflow) {
       return NextResponse.json(
         { error: "Workflow not found" },
         { status: 404 }
