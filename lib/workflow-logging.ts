@@ -8,6 +8,7 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/lib/supabase/types";
 
 export type LogStepStartParams = {
   executionId: string;
@@ -38,7 +39,7 @@ export async function logStepStartDb(
       node_name: params.nodeName,
       node_type: params.nodeType,
       status: "running",
-      input: params.input,
+      input: params.input as Json | undefined,
       started_at: new Date().toISOString(),
     })
     .select()
@@ -73,7 +74,7 @@ export async function logStepCompleteDb(
     .from("workflow_execution_logs")
     .update({
       status: params.status,
-      output: params.output,
+      output: params.output as Json | undefined,
       error: params.error,
       completed_at: new Date().toISOString(),
       duration: duration.toString(),
@@ -104,7 +105,7 @@ export async function logWorkflowCompleteDb(
     .from("workflow_executions")
     .update({
       status: params.status,
-      output: params.output,
+      output: params.output as Json | undefined,
       error: params.error,
       completed_at: new Date().toISOString(),
       duration: duration.toString(),
