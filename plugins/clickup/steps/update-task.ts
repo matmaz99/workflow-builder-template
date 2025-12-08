@@ -87,7 +87,7 @@ async function stepHandler(
       body.status = input.status;
     }
 
-    if (input.priority) {
+    if (input.priority && input.priority !== "none") {
       if (input.priority === "null") {
         body.priority = null;
       } else {

@@ -128,7 +128,7 @@ async function stepHandler(
       params.append("page", input.page);
     }
 
-    if (input.orderBy) {
+    if (input.orderBy && input.orderBy !== "none") {
       params.append("order_by", input.orderBy);
     }
 

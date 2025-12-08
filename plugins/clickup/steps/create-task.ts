@@ -103,7 +103,7 @@ async function stepHandler(
       body.status = input.status;
     }
 
-    if (input.priority) {
+    if (input.priority && input.priority !== "none") {
       body.priority = Number.parseInt(input.priority, 10);
     }
 
