@@ -93,7 +93,7 @@ export async function POST(
 
     // Validate that all integrationIds in workflow nodes belong to the current user
     const validation = await validateWorkflowIntegrations(
-      workflow.nodes as WorkflowNode[],
+      workflow.nodes as unknown as WorkflowNode[],
       user.id
     );
     if (!validation.valid) {
@@ -133,8 +133,8 @@ export async function POST(
     executeWorkflowBackground(
       execution.id,
       workflowId,
-      workflow.nodes as WorkflowNode[],
-      workflow.edges as WorkflowEdge[],
+      workflow.nodes as unknown as WorkflowNode[],
+      workflow.edges as unknown as WorkflowEdge[],
       input
     );
 

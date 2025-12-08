@@ -32,8 +32,8 @@ export async function GET(
     // Generate code
     const code = generateWorkflowSDKCode(
       workflow.name,
-      workflow.nodes,
-      workflow.edges
+      workflow.nodes as unknown as Parameters<typeof generateWorkflowSDKCode>[1],
+      workflow.edges as unknown as Parameters<typeof generateWorkflowSDKCode>[2]
     );
 
     return NextResponse.json({

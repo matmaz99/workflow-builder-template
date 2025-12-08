@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(cat:*)",
+      "mcp__supabase__list_organizations"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

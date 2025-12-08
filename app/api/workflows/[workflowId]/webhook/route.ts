@@ -53,14 +53,10 @@ async function validateApiKey(
   }
 
   // Update last used timestamp (don't await, fire and forget)
-  supabase
+  void supabase
     .from("api_keys")
     .update({ last_used_at: new Date().toISOString() })
-    .eq("id", apiKey.id)
-    .then(() => {})
-    .catch(() => {
-      // Fire and forget - ignore errors
-    });
+    .eq("id", apiKey.id);
 
   return { valid: true };
 }
@@ -157,7 +153,7 @@ export async function POST(
     }
 
     // Verify this is a webhook-triggered workflow
-    const triggerNode = (workflow.nodes as WorkflowNode[]).find(
+    const triggerNode = (workflow.nodes as unknown as WorkflowNode[]).find(
       (node) => node.data.type === "trigger"
     );
 
@@ -170,7 +166,7 @@ export async function POST(
 
     // Validate that all integrationIds in workflow nodes belong to the workflow owner
     const validation = await validateWorkflowIntegrations(
-      workflow.nodes as WorkflowNode[],
+      workflow.nodes as unknown as WorkflowNode[],
       workflow.user_id
     );
     if (!validation.valid) {
@@ -209,8 +205,8 @@ export async function POST(
     executeWorkflowBackground(
       execution.id,
       workflowId,
-      workflow.nodes as WorkflowNode[],
-      workflow.edges as WorkflowEdge[],
+      workflow.nodes as unknown as WorkflowNode[],
+      workflow.edges as unknown as WorkflowEdge[],
       body
     );
 

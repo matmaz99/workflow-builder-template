@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { generateId } from "@/lib/utils/id";
+import type { Json } from "@/lib/supabase/types";
 
 // Node type for type-safe node manipulation
 type WorkflowNodeLike = {
@@ -132,16 +132,14 @@ export async function POST(
       workflowName = `${baseName} ${counter}`;
     }
 
-    // Create the duplicated workflow
-    const newWorkflowId = generateId();
+    // Create the duplicated workflow (let database generate the ID)
     const { data: newWorkflow, error: insertError } = await supabase
       .from("workflows")
       .insert({
-        id: newWorkflowId,
         name: workflowName,
         description: sourceWorkflow.description,
-        nodes: newNodes,
-        edges: newEdges,
+        nodes: newNodes as unknown as Json,
+        edges: newEdges as unknown as Json,
         user_id: user.id,
         visibility: "private", // Duplicated workflows are always private
       })

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -10,26 +10,22 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: userData, error } = await supabase
-      .from("users")
-      .select("id, name, email, image, is_anonymous")
+    // Get profile data
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, name, image")
       .eq("id", user.id)
       .single();
 
-    if (error || !userData) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    // Get the user's account to determine auth provider
-    const { data: userAccount } = await supabase
-      .from("accounts")
-      .select("provider_id")
-      .eq("user_id", user.id)
-      .single();
+    // Determine auth provider from app_metadata
+    const provider = user.app_metadata?.provider || "email";
 
     return NextResponse.json({
-      ...userData,
-      providerId: userAccount?.provider_id ?? null,
+      id: user.id,
+      name: profile?.name || user.user_metadata?.name || user.user_metadata?.full_name || null,
+      email: user.email,
+      image: profile?.image || user.user_metadata?.avatar_url || null,
+      providerId: provider,
     });
   } catch (error) {
     console.error("Failed to get user:", error);
@@ -51,16 +47,10 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Check if user is an OAuth user (can't update profile)
-    const { data: userAccount } = await supabase
-      .from("accounts")
-      .select("provider_id")
-      .eq("user_id", user.id)
-      .single();
-
-    // Block updates for OAuth users (vercel, github, google, etc.)
-    const oauthProviders = ["vercel", "github", "google"];
-    if (userAccount && oauthProviders.includes(userAccount.provider_id)) {
+    // Block updates for OAuth users
+    const provider = user.app_metadata?.provider;
+    const oauthProviders = ["github", "google"];
+    if (provider && oauthProviders.includes(provider)) {
       return NextResponse.json(
         { error: "Cannot update profile for OAuth users" },
         { status: 403 }
@@ -68,17 +58,15 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const updates: { name?: string; email?: string } = {};
+    const updates: { name?: string } = {};
 
     if (body.name !== undefined) {
       updates.name = body.name;
     }
-    if (body.email !== undefined) {
-      updates.email = body.email;
-    }
 
+    // Update profile table
     const { error } = await supabase
-      .from("users")
+      .from("profiles")
       .update(updates)
       .eq("id", user.id);
 

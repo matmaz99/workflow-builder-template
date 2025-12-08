@@ -51,26 +51,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user metadata to check if anonymous
-    const { data: userData } = await supabase
-      .from("users")
-      .select("name, email, is_anonymous")
-      .eq("id", user.id)
-      .single();
-
-    // Check if user is anonymous
-    const isAnonymous =
-      userData?.is_anonymous ||
-      userData?.name === "Anonymous" ||
-      userData?.email?.startsWith("temp-");
-
-    if (isAnonymous) {
-      return NextResponse.json(
-        { error: "Anonymous users cannot create API keys" },
-        { status: 403 }
-      );
-    }
-
     const body = await request.json().catch(() => ({}));
     const name = body.name || null;
 

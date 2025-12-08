@@ -246,8 +246,8 @@ export async function GET(
     // Generate workflow-specific files
     const workflowFiles = generateWorkflowFiles({
       name: workflow.name,
-      nodes: workflow.nodes as WorkflowNode[],
-      edges: workflow.edges as WorkflowEdge[],
+      nodes: workflow.nodes as unknown as WorkflowNode[],
+      edges: workflow.edges as unknown as WorkflowEdge[],
     });
 
     // Merge boilerplate, step files, and workflow files
@@ -258,7 +258,7 @@ export async function GET(
     packageJson.dependencies = {
       ...packageJson.dependencies,
       workflow: "4.0.1-beta.7",
-      ...getIntegrationDependencies(workflow.nodes as WorkflowNode[]),
+      ...getIntegrationDependencies(workflow.nodes as unknown as WorkflowNode[]),
     };
     allFiles["package.json"] = JSON.stringify(packageJson, null, 2);
 

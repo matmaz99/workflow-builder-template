@@ -54,7 +54,7 @@ export async function GET(
     // Map logs to node statuses
     const nodeStatuses: NodeStatus[] = (logs || []).map((log) => ({
       nodeId: log.node_id,
-      status: log.status,
+      status: log.status as NodeStatus["status"],
     }));
 
     return NextResponse.json({
